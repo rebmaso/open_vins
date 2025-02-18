@@ -4,6 +4,17 @@
 [![ROS 2 Workflow](https://github.com/rpng/open_vins/actions/workflows/build_ros2.yml/badge.svg)](https://github.com/rpng/open_vins/actions/workflows/build_ros2.yml)
 [![ROS Free Workflow](https://github.com/rpng/open_vins/actions/workflows/build.yml/badge.svg)](https://github.com/rpng/open_vins/actions/workflows/build.yml)
 
+## Quickstart
+
+```
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug
+```
+
+```
+source install/setup.bash
+ros2 launch ov_msckf subscribe.launch.py config:=intnavlib_sim rviz_enable:=true verbosity:=DEBUG
+```
+
 Welcome to the OpenVINS project!
 The OpenVINS project houses some core computer vision code along with a state-of-the art filter-based visual-inertial
 estimator. The core filter is an [Extended Kalman filter](https://en.wikipedia.org/wiki/Extended_Kalman_filter) which
