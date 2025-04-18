@@ -1,5 +1,7 @@
 cmake-build-*
 build
+install
+log
 Build
 *.*~
 .idea
