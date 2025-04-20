@@ -25,7 +25,7 @@ To make it work on the ros bags recorded with the int-nav-lib simulator, make su
 
 ## TODO
 
-- GNSS Update. Check out ov_secondary posegraph? or just init filter manually in ECEF frame.
+- GNSS Update. Check out ov_secondary posegraph? or just init filter manually in ECEF frame (rewrite prop in ecef)
 
 - Check how to better tune triangulation (feature init) settings
 

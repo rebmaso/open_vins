@@ -338,6 +338,7 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // Also augment it with a new clone!
   // NOTE: if the state is already at the given time (can happen in sim)
   // NOTE: then no need to prop since we already are at the desired timestep
+  PRINT_DEBUG(RED "[DEBUG]: Doing propagation \n" RESET);
   if (state->_timestamp != message.timestamp) {
     propagator->propagate_and_clone(state, message.timestamp);
   }
