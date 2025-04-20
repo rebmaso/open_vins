@@ -15,6 +15,17 @@ source install/setup.bash
 ros2 launch ov_msckf subscribe.launch.py config:=intnavlib_sim rviz_enable:=true verbosity:=DEBUG
 ```
 
+## Make it work on int-nav-lib ros bags
+
+To make it work on the ros bags recorded with the int-nav-lib simulator, make sure to edit the estimator_config.yaml file accordingly. We need to do a couple things.
+
+1) enable zupt, but just at beginning, to do a simplified static initialization. Make sure platform stays static for a while in the simulation though.
+
+2) disable limits for feature triangulation (TODO: set them appropriately). Otherwise distant features are not triangulated.
+
+
+## ===========================================
+
 Welcome to the OpenVINS project!
 The OpenVINS project houses some core computer vision code along with a state-of-the art filter-based visual-inertial
 estimator. The core filter is an [Extended Kalman filter](https://en.wikipedia.org/wiki/Extended_Kalman_filter) which

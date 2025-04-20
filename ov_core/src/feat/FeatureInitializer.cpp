@@ -114,6 +114,9 @@ bool FeatureInitializer::single_triangulation(std::shared_ptr<Feature> feat,
 bool FeatureInitializer::single_triangulation_1d(std::shared_ptr<Feature> feat,
                                                  std::unordered_map<size_t, std::unordered_map<double, ClonePose>> &clonesCAM) {
 
+
+  PRINT_DEBUG(RED "[DEBUG]: Triangulating feat from tracks. Can we avoid triang with low baseline when far away? \n" RESET);
+  
   // Total number of measurements
   // Also set the first measurement to be the anchor frame
   int total_meas = 0;

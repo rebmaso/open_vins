@@ -95,6 +95,8 @@ void TrackKLT::feed_new_camera(const CameraData &message) {
 
 void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
 
+  PRINT_DEBUG(RED "[DEBUG]: Tracking monocular frame \n" RESET);
+
   // Lock this data feed for this camera
   size_t cam_id = message.sensor_ids.at(msg_id);
   std::lock_guard<std::mutex> lck(mtx_feeds.at(cam_id));
@@ -112,6 +114,7 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
     std::vector<cv::KeyPoint> good_left;
     std::vector<size_t> good_ids_left;
     perform_detection_monocular(imgpyr, mask, good_left, good_ids_left);
+    PRINT_DEBUG(RED "[DEBUG]: detecting \n" RESET);
     // Save the current image and pyramid
     std::lock_guard<std::mutex> lckv(mtx_last_vars);
     img_last[cam_id] = img;
@@ -188,6 +191,8 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
     ids_last[cam_id] = good_ids_left;
   }
   rT5 = boost::posix_time::microsec_clock::local_time();
+
+  PRINT_DEBUG(RED "[DEBUG]: Done tracking \n" RESET);
 
   // Timing information
   PRINT_ALL("[TIME-KLT]: %.4f seconds for pyramid\n", (rT2 - rT1).total_microseconds() * 1e-6);
@@ -873,10 +878,15 @@ void TrackKLT::perform_matching(const std::vector<cv::Mat> &img0pyr, const std::
   cv::findFundamentalMat(pts0_n, pts1_n, cv::FM_RANSAC, 2.0 / max_focallength, 0.999, mask_rsc);
 
   // Loop through and record only ones that are valid
+  int n_valid_kpts_fm = 0;
   for (size_t i = 0; i < mask_klt.size(); i++) {
     auto mask = (uchar)((i < mask_klt.size() && mask_klt[i] && i < mask_rsc.size() && mask_rsc[i]) ? 1 : 0);
     mask_out.push_back(mask);
+    // Debug - remove later
+    if(mask) n_valid_kpts_fm++;
   }
+
+  PRINT_DEBUG(RED "[DEBUG]: Tracking: FM RANSAC with normalized threshold %.4f - %d / %d \n" RESET, 2.0 / max_focallength, n_valid_kpts_fm, mask_klt.size());
 
   // Copy back the updated positions
   for (size_t i = 0; i < pts0.size(); i++) {
