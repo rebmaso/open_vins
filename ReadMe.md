@@ -23,6 +23,13 @@ To make it work on the ros bags recorded with the int-nav-lib simulator, make su
 
 2) disable limits for feature triangulation (TODO: set them appropriately). Otherwise distant features are not triangulated.
 
+## TODO
+
+- GNSS Update. Check out ov_secondary posegraph? or just init filter manually in ECEF frame.
+
+- Check how to better tune triangulation (feature init) settings
+
+- Calibrate my synthetic IMU with kalibr and ros bag. Check imu intrinsics are correct.
 
 ## ===========================================
 

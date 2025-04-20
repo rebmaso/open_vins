@@ -27,7 +27,7 @@ launch_args = [
     ),
     DeclareLaunchArgument(
         name="verbosity",
-        default_value="DEBUG",
+        default_value="INFO",
         description="ALL, DEBUG, INFO, WARNING, ERROR, SILENT",
     ),
     DeclareLaunchArgument(
@@ -96,7 +96,7 @@ def launch_setup(context):
         arguments=[
             "-d"
             + os.path.join(
-                get_package_share_directory("ov_msckf"), "launch", "display_ros2.rviz"
+                get_package_share_directory("ov_msckf"), "launch", "display_ros2_intnavlib.rviz"
             ),
             "--ros-args",
             "--log-level",
