@@ -95,6 +95,17 @@ public:
    */
   void initialize_with_gt(Eigen::Matrix<double, 17, 1> imustate);
 
+  /**
+   * @brief Given state and covariance, this will initialize our IMU state.
+   * @param imustate State in the MSCKF ordering: [time(sec),q_GtoI,p_IinG,v_IinG,b_gyro,b_accel]
+   */
+  void initialize_with_prior(Eigen::Matrix<double, 17, 1> imustate, 
+                                          const double & rot_std,
+                                          const double & pos_std,
+                                          const double & vel_std,
+                                          const double & acc_bias_std,
+                                          const double & gyro_bias_std);
+
   /// If we are initialized or not
   bool initialized() { return is_initialized_vio && timelastupdate != -1; }
 

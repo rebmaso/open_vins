@@ -5,6 +5,10 @@ project(ov_msckf)
 # The OpenCV version needs to match the one used by cv_bridge otherwise you will get a segmentation fault!
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV 3 QUIET)
+
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(intnavlib REQUIRED)
+
 if (NOT OpenCV_FOUND)
     find_package(OpenCV 4.5.4 EXACT REQUIRED)
 endif ()
@@ -51,6 +55,3 @@ else ()
     message(STATUS "No ROS versions found or building with ROS disabled, building ROS1.cmake without ROS")
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ROS1.cmake)
 endif ()
-
-
-

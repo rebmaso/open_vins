@@ -7,8 +7,15 @@
 ## Quickstart
 
 ```
+export CMAKE_BUILD_PARALLEL_LEVEL=3
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug
 ```
+
+Faster build (openvins is a pretty big project):
+
+```
+export CMAKE_BUILD_PARALLEL_LEVEL=3
+colcon build --cmake-args -G Ninja -DCMAKE_BUILD_TYPE=Release  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache```
 
 ```
 source install/setup.bash
