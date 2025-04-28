@@ -502,7 +502,7 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   featsup_MSCKF.insert(featsup_MSCKF.end(), feats_maxtracks.begin(), feats_maxtracks.end());
 
   // Debug: count active features
-  PRINT_DEBUG(RED "[DEBUG]: Update: performing update with %d features \n" RESET, featsup_MSCKF.size());
+  PRINT_DEBUG(RED "[DEBUG]: Doing Update with %d features \n" RESET, featsup_MSCKF.size());
 
   //===================================================================================
   // Now that we have a list of features, lets do the EKF update for MSCKF and SLAM!

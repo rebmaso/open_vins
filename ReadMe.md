@@ -15,7 +15,7 @@ Faster build (openvins is a pretty big project):
 
 ```
 export CMAKE_BUILD_PARALLEL_LEVEL=3
-colcon build --cmake-args -G Ninja -DCMAKE_BUILD_TYPE=Release  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache```
+colcon build --cmake-args -G Ninja -DCMAKE_BUILD_TYPE=Release  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache --event-handlers console_direct+```
 
 ```
 source install/setup.bash

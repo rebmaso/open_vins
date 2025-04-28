@@ -123,6 +123,7 @@ int main(int argc, char **argv) {
 
   NavSolutionEcef est_nav_ecef = nedToEcef(est_nav_ned);
 
+  // Openvins needs global_to_imu (not vice versa)
   Eigen::Quaterniond q_GtoI(est_nav_ecef.C_b_e);
 
   // [time(sec),q_GtoI,p_IinG,v_IinG,b_gyro,b_accel]

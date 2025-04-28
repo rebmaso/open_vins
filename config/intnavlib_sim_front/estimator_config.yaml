@@ -2,14 +2,10 @@
 
 verbosity: "INFO" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
 
-# Manual init parameters (Montenero dataset)
-
-init_start_time = 0.0; # set this to the timestamp of first imu msg... TODO improve
-
-init_lla: [40.82509679986001,14.24846312564603,500.0] 
+init_start_time: 0.0
+init_lla: [41.714659755848004, 14.06796456451474,1200]
 init_v_eb_n: [0.0,0.0,0.0]
 init_rpy_n_b: [0.0,0.0,0.0]
-
 init_att_unc: 0.0174533
 init_vel_unc: 0.1
 init_pos_unc: 10.0

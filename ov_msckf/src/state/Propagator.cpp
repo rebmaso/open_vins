@@ -26,9 +26,12 @@
 #include "utils/print.h"
 #include "utils/quat_ops.h"
 
+#include "intnavlib.h"
+
 using namespace ov_core;
 using namespace ov_type;
 using namespace ov_msckf;
+using namespace intnavlib;
 
 void Propagator::propagate_and_clone(std::shared_ptr<State> state, double timestamp) {
 
@@ -402,6 +405,9 @@ void Propagator::predict_and_compute(std::shared_ptr<State> state, const ov_core
   // Time elapsed over interval
   double dt = data_plus.timestamp - data_minus.timestamp;
   // assert(data_plus.timestamp>data_minus.timestamp);
+
+  // Correct gravity vector at each iteration
+  _gravity = - gravityEcef(state->_imu->pos());
 
   // IMU intrinsic calibration estimates (static)
   Eigen::Matrix3d Dw = State::Dm(state->_options.imu_model, state->_calib_imu_dw->value());

@@ -27,7 +27,7 @@ launch_args = [
     ),
     DeclareLaunchArgument(
         name="verbosity",
-        default_value="INFO",
+        default_value="WARNING",
         description="ALL, DEBUG, INFO, WARNING, ERROR, SILENT",
     ),
     DeclareLaunchArgument(
@@ -104,7 +104,23 @@ def launch_setup(context):
             ],
     )
 
-    return [node1, node2]
+    node3 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_ecef_to_global",
+        arguments=["0", "0", "0", "0", "0", "0", "ecef", "global"],
+        output="screen",
+    )
+
+    node4 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_ecef_to_enu",
+        arguments=["4625654.932618" , "1159144.912136" , "4222754.225894" , "0.251611 ", "0.322442" , "0.719422" , "0.561386", "ecef", "enu"],
+        output="screen",
+    )
+
+    return [node1, node2, node3, node4]
 
 
 def generate_launch_description():
