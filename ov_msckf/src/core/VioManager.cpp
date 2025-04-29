@@ -154,6 +154,7 @@ VioManager::VioManager(VioManagerOptions &params_) : thread_init_running(false),
   // Make the updater!
   updaterMSCKF = std::make_shared<UpdaterMSCKF>(params.msckf_options, params.featinit_options);
   updaterSLAM = std::make_shared<UpdaterSLAM>(params.slam_options, params.aruco_options, params.featinit_options);
+  updaterGNSS = std::make_shared<UpdaterGNSS>();
 
   // If we are using zero velocity updates, then create the updater
   if (params.try_zupt) {

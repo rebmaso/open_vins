@@ -216,6 +216,24 @@ void ROS2Visualizer::setup_subscribers(std::shared_ptr<ov_core::YamlParser> pars
       PRINT_INFO("subscribing to cam (mono): %s\n", cam_topic.c_str());
     }
   }
+
+  // =========== GNSS Subscriber =============
+
+  // Add GNSS subscriber
+  std::string gnss_topic;
+  _node->declare_parameter<std::string>("gnss_topic", "/gnss/fix");
+  _node->get_parameter("gnss_topic", gnss_topic);
+
+  // create subscriber
+  sub_gnss = _node->create_subscription<sensor_msgs::msg::NavSatFix>(
+      gnss_topic, rclcpp::SensorDataQoS(), std::bind(&ROS2Visualizer::callback_gnss, this, std::placeholders::_1));
+    PRINT_INFO("subscribing to GNSS: %s\n", gnss_topic.c_str());
+
+  // Get gnss_sync_tolerance_dt parameter
+  _node->declare_parameter<double>("gnss_sync_tolerance_dt", 0.01);
+  _node->get_parameter("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt);
+  PRINT_INFO("GNSS sync tolerance dt: %.4f\n", gnss_sync_tolerance_dt);
+
 }
 
 void ROS2Visualizer::visualize() {
@@ -437,6 +455,8 @@ void ROS2Visualizer::visualize_final() {
 
 void ROS2Visualizer::callback_inertial(const sensor_msgs::msg::Imu::SharedPtr msg) {
 
+  PRINT_DEBUG(RED "[DEBUG]: Main synchronous processing loop here \n" RESET);
+
   // convert into correct format
   ov_core::ImuData message;
   message.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
@@ -480,9 +500,25 @@ void ROS2Visualizer::callback_inertial(const sensor_msgs::msg::Imu::SharedPtr ms
         camera_queue.pop_front();
         auto rT0_2 = boost::posix_time::microsec_clock::local_time();
         double time_total = (rT0_2 - rT0_1).total_microseconds() * 1e-6;
-        PRINT_INFO(BLUE "[TIME]: %.4f seconds total (%.1f hz, %.2f ms behind)\n" RESET, time_total, 1.0 / time_total, update_dt);
+        PRINT_INFO(BLUE "[TIME]: Prop + Camera update %.4f seconds total (%.1f hz, %.2f ms behind)\n" RESET, time_total, 1.0 / time_total, update_dt);
       }
     }
+
+    // ======= GNSS Update after Camera update ==========
+
+    // If GNSS message, do gnss update
+    // Iterate all queue from oldest, drop if too old or too new wrt current state time
+
+    // find measurement that is recent enough, searching from oldest
+    while (!gnss_queue.empty() && gnss_queue.at(0).timestamp < _app->get_state()->_timestamp - gnss_sync_tolerance_dt) {
+      gnss_queue.pop_front();
+    }
+
+    // If got one, do update
+    if (!gnss_queue.empty()) {
+      _app->feed_measurement_gnss(gnss_queue.at(0));
+    }
+  
     thread_update_running = false;
   });
 
@@ -498,6 +534,7 @@ void ROS2Visualizer::callback_inertial(const sensor_msgs::msg::Imu::SharedPtr ms
 void ROS2Visualizer::callback_monocular(const sensor_msgs::msg::Image::SharedPtr msg0, int cam_id0) {
 
   // Check if we should drop this image
+  // Drop if more than track frequency!
   double timestamp = msg0->header.stamp.sec + msg0->header.stamp.nanosec * 1e-9;
   double time_delta = 1.0 / _app->get_params().track_frequency;
   if (camera_last_timestamp.find(cam_id0) != camera_last_timestamp.end() && timestamp < camera_last_timestamp.at(cam_id0) + time_delta) {
@@ -532,6 +569,28 @@ void ROS2Visualizer::callback_monocular(const sensor_msgs::msg::Image::SharedPtr
   std::lock_guard<std::mutex> lck(camera_queue_mtx);
   camera_queue.push_back(message);
   std::sort(camera_queue.begin(), camera_queue.end());
+}
+
+void ROS2Visualizer::callback_gnss(const sensor_msgs::msg::NavSatFix::SharedPtr msg) {
+
+  // TODO check timestamp and drop if more recent than update frequency
+
+  // Create the measurement
+  ov_core::GNSSData message;
+
+  message.timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+
+  message.latitude = msg->latitude;
+  message.longitude = msg->longitude;
+  message.altitude = msg->altitude;
+
+  message.pos_std = 2.5; // TODO get from msg
+
+  // Append to queue of GNSS msgs, sort by timestamp
+  std::lock_guard<std::mutex> lck(gnss_queue_mtx);
+  gnss_queue.push_back(message);
+  std::sort(gnss_queue.begin(), gnss_queue.end());
+
 }
 
 void ROS2Visualizer::callback_stereo(const sensor_msgs::msg::Image::ConstSharedPtr msg0, const sensor_msgs::msg::Image::ConstSharedPtr msg1,

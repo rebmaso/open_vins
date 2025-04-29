@@ -11,32 +11,27 @@ export CMAKE_BUILD_PARALLEL_LEVEL=3
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug
 ```
 
-Faster build (openvins is a pretty big project):
+Faster build with ninja and ccache (openvins is a pretty big project):
 
 ```
 export CMAKE_BUILD_PARALLEL_LEVEL=3
-colcon build --cmake-args -G Ninja -DCMAKE_BUILD_TYPE=Release  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache --event-handlers console_direct+```
+colcon build --cmake-args -G Ninja -DCMAKE_BUILD_TYPE=Release  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache --event-handlers console_direct+
+```
 
 ```
 source install/setup.bash
 ros2 launch ov_msckf subscribe.launch.py config:=intnavlib_sim rviz_enable:=true verbosity:=DEBUG
 ```
 
-## Make it work on int-nav-lib ros bags
-
-To make it work on the ros bags recorded with the int-nav-lib simulator, make sure to edit the estimator_config.yaml file accordingly. We need to do a couple things.
-
-1) enable zupt, but just at beginning, to do a simplified static initialization. Make sure platform stays static for a while in the simulation though.
-
-2) disable limits for feature triangulation (TODO: set them appropriately). Otherwise distant features are not triangulated.
-
 ## TODO
 
-- GNSS Update. Check out ov_secondary posegraph? or just init filter manually in ECEF frame (rewrite prop in ecef)
+- GNSS Update. Check out updaterzerovelocity.cpp:321 and copy from that! then buffer gnss measurements and handle gnss buffer directly in do_feature_propagate_update
 
 - Check how to better tune triangulation (feature init) settings
 
 - Calibrate my synthetic IMU with kalibr and ros bag. Check imu intrinsics are correct.
+
+- rewrite prop equations taking into account that global frame (ecef now) is not inertial!
 
 ## ===========================================
 

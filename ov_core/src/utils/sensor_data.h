@@ -46,6 +46,30 @@ struct ImuData {
   bool operator<(const ImuData &other) const { return timestamp < other.timestamp; }
 };
 
+struct GNSSData {
+
+  /// Timestamp of the reading
+  double timestamp;
+
+  /// Latitude (deg)
+  double latitude;
+
+  /// Longitude (deg)
+  double longitude;
+
+  /// Altitude (WGS84)
+  double altitude;
+
+  // Position std dev
+  double pos_std;
+
+  /// Sort function to allow for using of STL containers
+  bool operator<(const GNSSData &other) const {
+      return timestamp < other.timestamp;
+    }
+
+};
+
 /**
  * @brief Struct for a collection of camera measurements.
  *

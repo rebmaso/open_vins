@@ -33,6 +33,8 @@
 
 #include "VioManagerOptions.h"
 
+#include "update/UpdaterGNSS.h"
+
 namespace ov_core {
 struct ImuData;
 struct CameraData;
@@ -79,6 +81,12 @@ public:
    * @param message Contains our timestamp, images, and camera ids
    */
   void feed_measurement_camera(const ov_core::CameraData &message) { track_image_and_update(message); }
+
+  /**
+   * @brief Feed function for GNSS measurements
+   * @param message Contains timestamp and loose GNSS data
+   */
+  void feed_measurement_gnss(const ov_core::GNSSData &message) { updaterGNSS->update(state, message); }
 
   /**
    * @brief Feed function for a synchronized simulated cameras
@@ -213,6 +221,9 @@ protected:
 
   /// Our SLAM/ARUCO feature updater
   std::shared_ptr<UpdaterSLAM> updaterSLAM;
+
+  /// GNSS updater
+  std::shared_ptr<UpdaterGNSS> updaterGNSS;
 
   /// Our zero velocity tracker
   std::shared_ptr<UpdaterZeroVelocity> updaterZUPT;

@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
   params.use_multi_threading_subs = true;
   sys = std::make_shared<VioManager>(params);
 
-  // =============== Init estimator manually, reading from config file ==============
+  // =============== Init estimator state in ECEF manually, reading from config file ==============
 
   double init_start_time;
 

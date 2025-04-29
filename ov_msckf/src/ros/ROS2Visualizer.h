@@ -58,6 +58,7 @@
 namespace ov_core {
 class YamlParser;
 struct CameraData;
+struct GNSSData;
 } // namespace ov_core
 
 namespace ov_msckf {
@@ -119,6 +120,9 @@ public:
   void callback_stereo(const sensor_msgs::msg::Image::ConstSharedPtr msg0, const sensor_msgs::msg::Image::ConstSharedPtr msg1, int cam_id0,
                        int cam_id1);
 
+  /// Callback for GNSS meas 
+  void callback_gnss(const sensor_msgs::msg::NavSatFix::SharedPtr msg);
+
 protected:
   /// Publish the current state
   void publish_state();
@@ -162,6 +166,9 @@ protected:
   std::vector<std::shared_ptr<message_filters::Synchronizer<sync_pol>>> sync_cam;
   std::vector<std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>>> sync_subs_cam;
 
+  // GNSS subscriber
+  rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr sub_gnss;
+
   // For path viz
   std::vector<geometry_msgs::msg::PoseStamped> poses_imu;
 
@@ -187,6 +194,11 @@ protected:
   /// a nice feature to have for general robustness to bad camera drivers.
   std::deque<ov_core::CameraData> camera_queue;
   std::mutex camera_queue_mtx;
+
+  /// Queue up GNSS measurements sorted by time
+  std::deque<ov_core::GNSSData> gnss_queue;
+  std::mutex gnss_queue_mtx;
+  double gnss_sync_tolerance_dt;
 
   // Last camera message timestamps we have received (mapped by cam id)
   std::map<int, double> camera_last_timestamp;
