@@ -115,12 +115,20 @@ def launch_setup(context):
     node4 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        name="static_tf_ecef_to_enu",
-        arguments=["4625654.932618" , "1159144.912136" , "4222754.225894" , "0.251611 ", "0.322442" , "0.719422" , "0.561386", "ecef", "enu"],
+        name="static_tf_enu_to_ecef_montenero",
+        arguments=["4625654.932618" , "1159144.912136" , "4222754.225894" , "0.251611 ", "0.322442" , "0.719422" , "0.561386", "ecef", "enu_montenero"],
         output="screen",
     )
 
-    return [node1, node2, node3, node4]
+    node5 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_enu_to_ecef_monte_echia",
+        arguments=[ "4684275.343645" , "1189424.962327" , "4148268.187624" , "0.255429 " , "0.328392" ,  "0.717783"  , "0.558303" , "ecef", "enu_monte_echia"],
+        output="screen",
+    )
+
+    return [node1, node2, node3, node4, node5]
 
 
 def generate_launch_description():
