@@ -6,9 +6,9 @@ from scipy.spatial.transform import Rotation as R
 # Use as arguments for static transform in ros2, for visualization purposes
 
 # Input LLA (latitude, longitude, altitude)
-lat = 40.83093690353008
-lon = 14.247363819588745
-alt = 50
+lat = 40.867752314626976
+lon = 14.122253633809104
+alt = 100
 
 # 1. Convert LLA to ECEF
 transformer = Transformer.from_crs("epsg:4979", "epsg:4978", always_xy=True)  # WGS84 3D to ECEF

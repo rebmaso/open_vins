@@ -100,6 +100,35 @@ struct VioManagerOptions {
   /// The path to the file we will record the timing information into
   std::string record_timing_filepath = "ov_msckf_timing.txt";
 
+  // ==== Prior Initialization Params =====
+
+  /// Initial timestamp for prior initialization.
+  double init_start_time = 0.0;
+
+  /// Initial Latitude, Longitude, Altitude [deg, deg, m].
+  std::vector<double> init_lla = {0.0, 0.0, 0.0};
+  /// Initial Velocity in NED frame [m/s].
+  std::vector<double> init_v_eb_n = {0.0, 0.0, 0.0};
+  /// Initial Roll, Pitch, Yaw (NED frame to Body frame) [deg].
+  std::vector<double> init_rpy_n_b = {0.0, 0.0, 0.0};
+
+  /// Initial attitude uncertainty (standard deviation) [rad].
+  double init_att_unc = 0.1;
+  /// Initial velocity uncertainty (standard deviation) [m/s].
+  double init_vel_unc = 0.1;
+  /// Initial position uncertainty (standard deviation) [m].
+  double init_pos_unc = 1.0;
+  /// Initial accelerometer bias uncertainty (standard deviation) [m/s^2].
+  double init_b_a_unc = 0.01;
+  /// Initial gyroscope bias uncertainty (standard deviation) [rad/s].
+  double init_b_g_unc = 0.001;
+
+  // ==== GNSS params =====
+
+  bool use_gnss = false;
+  double gnss_sync_tolerance_dt = 0.05;
+  std::string gnss_topic = "/fix";
+
   /**
    * @brief This function will load print out all estimator settings loaded.
    * This allows for visual checking that everything was loaded properly from ROS/CMD parsers.
@@ -119,6 +148,19 @@ struct VioManagerOptions {
       parser->parse_config("zupt_only_at_beginning", zupt_only_at_beginning);
       parser->parse_config("record_timing_information", record_timing_information);
       parser->parse_config("record_timing_filepath", record_timing_filepath);
+      parser->parse_config("use_gnss", use_gnss);
+      parser->parse_config("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt);
+      parser->parse_config("gnss_topic", gnss_topic);
+
+      parser->parse_config("init_start_time", init_start_time);
+      parser->parse_config("init_lla", init_lla);
+      parser->parse_config("init_v_eb_n", init_v_eb_n);
+      parser->parse_config("init_rpy_n_b", init_rpy_n_b);
+      parser->parse_config("init_att_unc", init_att_unc);
+      parser->parse_config("init_vel_unc", init_vel_unc);
+      parser->parse_config("init_pos_unc", init_pos_unc);
+      parser->parse_config("init_b_a_unc", init_b_a_unc);
+      parser->parse_config("init_b_g_unc", init_b_g_unc);
     }
     PRINT_DEBUG("  - dt_slam_delay: %.1f\n", dt_slam_delay);
     PRINT_DEBUG("  - zero_velocity_update: %d\n", try_zupt);
@@ -128,6 +170,18 @@ struct VioManagerOptions {
     PRINT_DEBUG("  - zupt_only_at_beginning?: %d\n", zupt_only_at_beginning);
     PRINT_DEBUG("  - record timing?: %d\n", (int)record_timing_information);
     PRINT_DEBUG("  - record timing filepath: %s\n", record_timing_filepath.c_str());
+    PRINT_DEBUG("  - use gnss?: %d\n", (int)use_gnss);
+    PRINT_DEBUG("  - gnss_sync_tolerance_dt: %.4f\n", gnss_sync_tolerance_dt);
+    PRINT_DEBUG("  - gnss_topic: %s\n", gnss_topic.c_str());
+    PRINT_DEBUG("  - init_start_time: %.4f\n", init_start_time);
+    PRINT_DEBUG("  - init_lla [deg,deg,m]: %.6f, %.6f, %.2f\n", init_lla[0], init_lla[1], init_lla[2]);
+    PRINT_DEBUG("  - init_v_eb_n [m/s]: %.3f, %.3f, %.3f\n", init_v_eb_n[0], init_v_eb_n[1], init_v_eb_n[2]);
+    PRINT_DEBUG("  - init_rpy_n_b [deg]: %.3f, %.3f, %.3f\n", init_rpy_n_b[0], init_rpy_n_b[1], init_rpy_n_b[2]);
+    PRINT_DEBUG("  - init_att_unc [rad]: %.4f\n", init_att_unc);
+    PRINT_DEBUG("  - init_vel_unc [m/s]: %.4f\n", init_vel_unc);
+    PRINT_DEBUG("  - init_pos_unc [m]: %.4f\n", init_pos_unc);
+    PRINT_DEBUG("  - init_b_a_unc [m/s^2]: %.5f\n", init_b_a_unc);
+    PRINT_DEBUG("  - init_b_g_unc [rad/s]: %.5f\n", init_b_g_unc);
   }
 
   // NOISE / CHI2 ============================
@@ -432,6 +486,7 @@ struct VioManagerOptions {
   /// Will check after doing KLT track and remove any features closer than this
   int min_px_dist = 10;
 
+
   /// What type of pre-processing histogram method should be applied to images
   ov_core::TrackBase::HistogramMethod histogram_method = ov_core::TrackBase::HistogramMethod::HISTOGRAM;
 
@@ -440,6 +495,19 @@ struct VioManagerOptions {
 
   /// Frequency we want to track images at (higher freq ones will be dropped)
   double track_frequency = 20.0;
+
+  // ==== Marginalization params ======
+
+  /// If true, enables VINS-Mono style keyframe selection for marginalization.
+  bool keyframing_on = false;
+
+  /// Minimum number of commonly tracked features between second-last and third-last clones. If below, second-last is a keyframe.
+  int kf_min_tracked_features = 20;
+
+  /// Minimum average disparity (normalized pixels) between second-last and third-last clones. If above, second-last is a keyframe.
+  double kf_min_avg_disp = 20; // Adjust this value based on typical motion/scene
+
+  // ==================================
 
   /// Parameters used by our feature initialize / triangulator
   ov_core::FeatureInitializerOptions featinit_options;
@@ -482,6 +550,11 @@ struct VioManagerOptions {
       }
       parser->parse_config("knn_ratio", knn_ratio);
       parser->parse_config("track_frequency", track_frequency);
+
+      // Add parsing for the new parameters
+      parser->parse_config("keyframing_on", keyframing_on);
+      parser->parse_config("kf_min_tracked_features", kf_min_tracked_features);
+      parser->parse_config("kf_min_avg_disp", kf_min_avg_disp);
     }
     PRINT_DEBUG("FEATURE TRACKING PARAMETERS:\n");
     PRINT_DEBUG("  - use_stereo: %d\n", use_stereo);
@@ -499,6 +572,12 @@ struct VioManagerOptions {
     PRINT_DEBUG("  - hist method: %d\n", (int)histogram_method);
     PRINT_DEBUG("  - knn ratio: %.3f\n", knn_ratio);
     PRINT_DEBUG("  - track frequency: %.1f\n", track_frequency);
+
+    // Add printing for the new parameters
+    PRINT_DEBUG("  - keyframing_on: %d\n", keyframing_on);
+    PRINT_DEBUG("  - kf_min_tracked_features: %d\n", kf_min_tracked_features);
+    PRINT_DEBUG("  - kf_min_avg_disp: %.3f\n", kf_min_avg_disp);
+
     featinit_options.print(parser);
   }
 

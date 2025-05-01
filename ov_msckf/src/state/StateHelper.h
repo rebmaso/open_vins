@@ -224,6 +224,13 @@ public:
   static void marginalize_old_clone(std::shared_ptr<State> state);
 
   /**
+   * @brief Remove second to last clone if its not a KeyFrame, inspired by VINS-mono to keep clone window sparse
+   * 
+   * @param state Pointer to state
+   */
+  static void marginalize_second_to_last_clone(std::shared_ptr<State> state);
+
+  /**
    * @brief Marginalize bad SLAM features
    * @param state Pointer to state
    */

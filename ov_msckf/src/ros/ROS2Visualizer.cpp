@@ -220,18 +220,22 @@ void ROS2Visualizer::setup_subscribers(std::shared_ptr<ov_core::YamlParser> pars
   // =========== GNSS Subscriber =============
 
   // Add GNSS subscriber
-  std::string gnss_topic;
-  _node->declare_parameter<std::string>("gnss_topic", "/gnss/fix");
-  _node->get_parameter("gnss_topic", gnss_topic);
+  std::string gnss_topic = "/gnss/fix";
+  // _node->declare_parameter<std::string>("gnss_topic", "/gnss/fix");
+  // _node->get_parameter("gnss_topic", gnss_topic);
+  parser->parse_config("gnss_topic", gnss_topic); // Parse from config file ONLY
 
   // create subscriber
   sub_gnss = _node->create_subscription<sensor_msgs::msg::NavSatFix>(
       gnss_topic, rclcpp::SensorDataQoS(), std::bind(&ROS2Visualizer::callback_gnss, this, std::placeholders::_1));
-    PRINT_INFO("subscribing to GNSS: %s\n", gnss_topic.c_str());
+  PRINT_INFO("Subscribing to GNSS: %s\n", gnss_topic.c_str()); // Use INFO or DEBUG as appropriate
 
   // Get gnss_sync_tolerance_dt parameter
-  _node->declare_parameter<double>("gnss_sync_tolerance_dt", 0.01);
-  _node->get_parameter("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt);
+  gnss_sync_tolerance_dt = 0.01;
+  // _node->declare_parameter<double>("gnss_sync_tolerance_dt", 0.01);
+  // _node->get_parameter("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt);
+  parser->parse_config("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt); // Parse from config file ONLY
+
   PRINT_INFO("GNSS sync tolerance dt: %.4f\n", gnss_sync_tolerance_dt);
 
 }

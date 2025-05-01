@@ -33,6 +33,7 @@
 #include "utils/opencv_lambda_body.h"
 #include "utils/print.h"
 #include "utils/sensor_data.h"
+#include "feat/FeatureHelper.h" // Added for compute_disparity
 
 #include "init/InertialInitializer.h"
 
@@ -42,6 +43,7 @@
 #include "update/UpdaterMSCKF.h"
 #include "update/UpdaterSLAM.h"
 #include "update/UpdaterZeroVelocity.h"
+#include "intnavlib.h" // For coordinate transformations
 
 using namespace ov_core;
 using namespace ov_type;
@@ -162,6 +164,37 @@ VioManager::VioManager(VioManagerOptions &params_) : thread_init_running(false),
                                                         propagator, params.gravity_mag, params.zupt_max_velocity,
                                                         params.zupt_noise_multiplier, params.zupt_max_disparity);
   }
+
+  //===================================================================================
+  // Initialize state from prior
+  //===================================================================================
+  using namespace intnavlib; // Use namespace for coordinate transforms
+
+  // Convert prior NED/LLA state to ECEF
+  NavSolutionNed est_nav_ned = NavSolutionNed{0.0,
+                                deg_to_rad * params.init_lla[0],
+                                deg_to_rad * params.init_lla[1],
+                                params.init_lla[2],
+                                Eigen::Vector3d(params.init_v_eb_n[0], params.init_v_eb_n[1], params.init_v_eb_n[2]),
+                                rpyToR(deg_to_rad * Eigen::Vector3d(params.init_rpy_n_b[0], params.init_rpy_n_b[1], params.init_rpy_n_b[2])).transpose()};
+
+  NavSolutionEcef est_nav_ecef = nedToEcef(est_nav_ned);
+
+  // OpenVINS uses global_to_imu (GtoI) convention, ECEF is global (e), IMU is body (b)
+  Eigen::Quaterniond q_GtoI(est_nav_ecef.C_b_e);
+
+  // Create the initial state vector [time(sec), q_GtoI, p_IinG, v_IinG, b_gyro, b_accel]
+  Eigen::Matrix<double, 17, 1> init_imustate;
+  init_imustate(0,0) = params.init_start_time; // t0
+  init_imustate.block<4,1>(1,0) = q_GtoI.coeffs(); // q_GtoI
+  init_imustate.block<3,1>(5,0) = est_nav_ecef.r_eb_e; // p_IinG (position of IMU 'I' in Global 'G')
+  init_imustate.block<3,1>(8,0) = est_nav_ecef.v_eb_e; // v_IinG (velocity of IMU 'I' in Global 'G')
+  init_imustate.block<3,1>(11,0) = Eigen::Vector3d::Zero(); // b_gyro (initialize biases to zero)
+  init_imustate.block<3,1>(14,0) = Eigen::Vector3d::Zero(); // b_accel (initialize biases to zero)
+
+  // Call the initialization function with prior uncertainties
+  initialize_with_prior(init_imustate, params.init_att_unc, params.init_pos_unc, params.init_vel_unc,
+                        params.init_b_a_unc, params.init_b_g_unc);
 }
 
 void VioManager::feed_measurement_imu(const ov_core::ImuData &message) {
@@ -597,6 +630,86 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
       trackARUCO->get_feature_database()->cleanup_measurements(state->margtimestep());
     }
   }
+
+  // ================ Keyframing Logic (inspired by VINS Mono) =================
+
+  // Here, before marginalizing out oldest clone, which is triggered if window has exceeded max count,
+  // Check if second to last clone is a keyframe. If it is, marginalize that one.
+  // This means that our window is comprised of keyframes only
+  // This keeps the window sparse and long. Inspired by VINS-Mono marginalization strategy
+  // See Estimator::processImage -> FeatureManager::addFeatureCheckParallax -> double FeatureManager::compensatedParallax2
+  // if (f_manager.addFeatureCheckParallax(frame_count, image, td))
+  // marginalization_flag = MARGIN_OLD;
+  // else
+  //     marginalization_flag = MARGIN_SECOND_NEW;
+  // Eventually, window will then exceed max count and oldest state marginalization still necessary
+
+  // Count total n of frames. If < 3 skip
+  // Count tracked features
+  // Sum up parallax for every feature tracked between third and second last clones
+  // If tracked feats < N or parallax sum > M --> add KF (marginalize clone)
+
+  // Secondary Note: we should only use up to last keyframe (so, second to last clone) when initializing new landmarks.
+  // Dont want to triangulate with latest frame (could be a non keyframe). However, condition number check at triang should take care of that
+
+  bool marginalize_second_last = false;
+
+  if (params.keyframing_on && state->_clones_IMU.size() >= 3) {
+
+    // Get timestamps for the last three clones
+    auto it_newest = state->_clones_IMU.rbegin(); // Newest
+    auto it_second_last = std::next(it_newest);   // Second newest (the one we evaluate)
+    auto it_third_last = std::next(it_second_last); // Third newest (reference for parallax)
+
+    double ts_second_last = it_second_last->first;
+    double ts_third_last = it_third_last->first;
+    PRINT_DEBUG(YELLOW "[KF DEBUG]: Checking keyframe status for second-last clone at ts=%.4f (ref third-last ts=%.4f)\n" RESET,
+                ts_second_last, ts_third_last);
+
+    // Use FeatureHelper to compute disparity (parallax approximation) and common features
+    // between the third-to-last and second-to-last clones.
+    // Note: compute_disparity uses RAW pixel coordinates.
+
+    double disp_mean = 0.0; // Will hold the mean disparity
+    double disp_var = 0.0;     // Variance, not used directly for keyframing decision
+    int num_common_features = 0; // Will hold the count of common features
+
+    ov_core::FeatureHelper::compute_disparity(trackFEATS->get_feature_database(),
+                                              ts_third_last, ts_second_last,
+                                              disp_mean, disp_var, num_common_features);
+
+    // TODO should consider proper ray parallax as done in MATLAB re-implementation:
+    // BTW, VINS-Mono also cheats and uses this dumb parallax=disparity implementation
+
+    // function isLarge = isLargeParalalx(points1, points2, pose1, pose2, intrinsics, minParallax)
+
+    //   % Parallax check
+    //   ray1 = [points1, ones(size(points1(:,1)))]/intrinsics.K' *pose1.R';
+    //   ray2 = [points2, ones(size(points1(:,2)))]/intrinsics.K' *pose2.R';
+
+    //   cosParallax = sum(ray1 .* ray2, 2) ./(vecnorm(ray1, 2, 2) .* vecnorm(ray2, 2, 2));
+    //   isLarge     = cosParallax < cosd(minParallax) & cosParallax > 0;
+    //   end
+    // }
+
+    PRINT_DEBUG(RED "Keyframing: num_common_features = %d, disp_mean = %.4f\n" RESET, num_common_features, disp_mean);
+    PRINT_DEBUG(RED "Keyframing: kf_min_tracked_features = %d, kf_min_avg_disp = %.4f\n" RESET, params.kf_min_tracked_features, params.kf_min_avg_disp);
+
+    // Apply VINS-Mono Keyframe Criteria
+    // It's a keyframe if parallax is large OR tracked features are few.
+    // Therefore, it's NOT a keyframe if parallax is small AND tracked features are many.
+    bool second_last_is_keyframe = (num_common_features < params.kf_min_tracked_features) || (disp_mean > params.kf_min_avg_disp);
+
+    if (!second_last_is_keyframe) { // Marginalize if it's NOT a keyframe
+        PRINT_DEBUG(RED "Keyframing: Marginalizing second last clone (not a keyframe)\n") RESET;
+        // StateHelper::marginalize_second_to_last_clone(state);
+    }
+  }
+
+  // Note: We might still need to marginalize the oldest if the window is *still* too large after this.
+  // The subsequent call to marginalize_old_clone handles this.
+
+  // ===========================================================
 
   // Finally marginalize the oldest clone if needed
   StateHelper::marginalize_old_clone(state);

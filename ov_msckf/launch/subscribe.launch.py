@@ -27,7 +27,7 @@ launch_args = [
     ),
     DeclareLaunchArgument(
         name="verbosity",
-        default_value="SILENT",
+        default_value="ALL",
         description="ALL, DEBUG, INFO, WARNING, ERROR, SILENT",
     ),
     DeclareLaunchArgument(
@@ -128,7 +128,15 @@ def launch_setup(context):
         output="screen",
     )
 
-    return [node1, node2, node3, node4, node5]
+    node6 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_enu_to_ecef_solfatara",
+        arguments=[  "4684304.749366" , "1178550.384959" , "4151393.515361" , "0.255607 " , "0.327883" ,  "0.717279"  , "0.559168"   , "ecef", "enu_solfatara"],
+        output="screen",
+    )
+
+    return [node1, node2, node3, node4, node5, node6]
 
 
 def generate_launch_description():

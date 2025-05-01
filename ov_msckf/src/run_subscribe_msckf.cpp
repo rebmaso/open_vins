@@ -24,7 +24,6 @@
 #include "core/VioManager.h"
 #include "core/VioManagerOptions.h"
 #include "utils/dataset_reader.h"
-#include "intnavlib.h"
 
 #if ROS_AVAILABLE == 1
 #include "ros/ROS1Visualizer.h"
@@ -35,7 +34,6 @@
 #endif
 
 using namespace ov_msckf;
-using namespace intnavlib;
 
 std::shared_ptr<VioManager> sys;
 #if ROS_AVAILABLE == 1
@@ -86,65 +84,6 @@ int main(int argc, char **argv) {
   params.print_and_load(parser);
   params.use_multi_threading_subs = true;
   sys = std::make_shared<VioManager>(params);
-
-  // =============== Init estimator state in ECEF manually, reading from config file ==============
-
-  double init_start_time;
-
-  std::vector<double> init_lla;
-  std::vector<double> init_v_eb_n;
-  std::vector<double> init_rpy_n_b;
-
-  double init_att_unc;
-  double init_vel_unc;
-  double init_pos_unc;
-  double init_b_a_unc;
-  double init_b_g_unc;
-
-  parser->parse_config("init_start_time", init_start_time);
-
-  parser->parse_config("init_lla", init_lla);
-  parser->parse_config("init_v_eb_n", init_v_eb_n);
-  parser->parse_config("init_rpy_n_b", init_rpy_n_b);
-
-  // standard deviations
-  parser->parse_config("init_att_unc", init_att_unc);
-  parser->parse_config("init_vel_unc", init_vel_unc);
-  parser->parse_config("init_pos_unc", init_pos_unc);
-  parser->parse_config("init_b_a_unc", init_b_a_unc);
-  parser->parse_config("init_b_g_unc", init_b_g_unc);
-
-  NavSolutionNed est_nav_ned = NavSolutionNed{0.0,
-                                deg_to_rad * init_lla[0], 
-                                deg_to_rad * init_lla[1], 
-                                init_lla[2], 
-                                Eigen::Vector3d(init_v_eb_n[0], init_v_eb_n[1], init_v_eb_n[2]), 
-                                rpyToR(deg_to_rad * Eigen::Vector3d(init_rpy_n_b[0], init_rpy_n_b[1], init_rpy_n_b[2])).transpose()};
-
-  NavSolutionEcef est_nav_ecef = nedToEcef(est_nav_ned);
-
-  // Openvins needs global_to_imu (not vice versa)
-  Eigen::Quaterniond q_GtoI(est_nav_ecef.C_b_e);
-
-  // [time(sec),q_GtoI,p_IinG,v_IinG,b_gyro,b_accel]
-
-  Eigen::Matrix<double, 17, 1> init_imustate;
-
-  init_imustate(0,0) = init_start_time; // t0
-  init_imustate.block<4,1>(1,0) = q_GtoI.coeffs(); // q_GtoI
-  init_imustate.block<3,1>(5,0) =  est_nav_ecef.r_eb_e; // p_IinG
-  init_imustate.block<3,1>(8,0) = est_nav_ecef.v_eb_e; // v_IinG
-  init_imustate.block<3,1>(11,0) = Eigen::Vector3d::Zero(); //  b_gyro
-  init_imustate.block<3,1>(14,0) = Eigen::Vector3d::Zero(); // b_accel
-
-  sys->initialize_with_prior(init_imustate,
-                              init_att_unc,
-                              init_vel_unc,
-                              init_pos_unc,
-                              init_b_a_unc,
-                              init_b_g_unc);
-
-  // ===============================================
 
 #if ROS_AVAILABLE == 1
   viz = std::make_shared<ROS1Visualizer>(nh, sys);

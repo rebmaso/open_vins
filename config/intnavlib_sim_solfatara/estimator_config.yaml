@@ -3,8 +3,8 @@
 verbosity: "DEBUG" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
 
 init_start_time: 0.0
-init_lla: [41.714659755848004, 14.06796456451474,1200]
-init_v_eb_n: [0.0,0.0,0.0]
+init_lla: [40.84670,14.1171,1000]
+init_v_eb_n: [50.0,0.0,0.0]
 init_rpy_n_b: [0.0,0.0,0.0]
 init_att_unc: 0.0174533
 init_vel_unc: 0.1
@@ -17,8 +17,8 @@ gnss_sync_tolerance_dt: 0.01
 gnss_topic: "/fix/gnss"
 
 keyframing_on: true
-kf_min_tracked_features: 20
 kf_min_avg_disp: 20.0
+kf_min_tracked_features: 15
 
 use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
 integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then analytical covariance propagation is used)
@@ -109,10 +109,10 @@ histogram_method: "HISTOGRAM" # NONE, HISTOGRAM, CLAHE
 
 
 # Tune to make it work with far away features (otherwise rejects stuff)
-fi_max_dist: 50000.0
+fi_max_dist: 50000000.0
 fi_min_dist: 50.0
-fi_max_baseline: 10000
-fi_max_cond_number: 25000
+fi_max_baseline: 10000000
+fi_max_cond_number: 25000 # increase this when features can be both far and close (eg front looking cam)
 #fi_max_runs: 10
 #fi_triangulate_1d: false
 
