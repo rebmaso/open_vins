@@ -61,7 +61,7 @@ public:
                                 double &disp_var, int &total_feats) {
 
     // Get features seen from the first image
-    std::vector<std::shared_ptr<Feature>> feats0 = db->features_containing(time0, false, true);
+    std::vector<std::shared_ptr<Feature>> feats0 = db->features_containing(time0, false, false);
 
     // Compute the disparity
     std::vector<double> disparities;

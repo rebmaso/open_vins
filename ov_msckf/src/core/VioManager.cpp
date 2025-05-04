@@ -566,6 +566,12 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // Now that we have a list of features, lets do the EKF update for MSCKF and SLAM!
   //===================================================================================
 
+  // Debug: print n. of candidate SLAM & MSCKF feats:  
+  PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate MSCKF feats: %d \n" RESET, (int)featsup_MSCKF.size());
+  PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate SLAM feats: %d \n" RESET, (int)feats_slam.size());
+  PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate SLAM feats (new): %d \n" RESET, (int)feats_slam_DELAYED.size());
+  PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate SLAM feats (old): %d \n" RESET, (int)feats_slam_UPDATE.size());
+
   // Sort based on track length
   // TODO: we should have better selection logic here (i.e. even feature distribution in the FOV etc..)
   // TODO: right now features that are "lost" are at the front of this vector, while ones at the end are long-tracks
