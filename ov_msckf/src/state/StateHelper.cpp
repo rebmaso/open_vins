@@ -628,48 +628,20 @@ void StateHelper::marginalize_old_clone(std::shared_ptr<State> state) {
   }
 }
 
-void StateHelper::marginalize_second_to_last_clone(std::shared_ptr<State> state) {
-
-  // Assumes decision has been already made. No checks done here
+void StateHelper::marginalize_clone(std::shared_ptr<State> state, const double & marginal_time) {
 
   // Lock the mutex to avoid deleting any elements from _clones_IMU while accessing it from other threads
   std::lock_guard<std::mutex> lock(state->_mutex_state);
+  assert(marginal_time != INFINITY);
 
-  // Ensure we have at least two clones to have a "second to last"
-  if (state->_clones_IMU.size() < 2) {
-    PRINT_WARNING(YELLOW "[MARG]: Attempted to marginalize second-to-last clone, but window size is %zu (< 2). Doing nothing.\n" RESET, state->_clones_IMU.size());
+  // Check marginal time in clones imu
+  if (state->_clones_IMU.find(marginal_time) == state->_clones_IMU.end()) {
+    PRINT_DEBUG(YELLOW "[KF]: Can't find clone to marginalize" RESET);
     return;
   }
-
-  // Find the second newest timestamp and pose
-  // std::map is sorted by key (timestamp), so the second to last element is the second newest clone
-  auto second_newest_it = state->_clones_IMU.end();
-  std::advance(second_newest_it, -2); // Iterator to the second-to-last element
-  double second_newest_ts = second_newest_it->first;
-  std::shared_ptr<PoseJPL> clone_to_marg = second_newest_it->second;
-
-  // Check if the clone pointer is valid
-  if (!clone_to_marg) {
-      PRINT_ERROR(RED "[MARG]: Found null pointer for second-to-last clone at timestamp %.4f! Aborting marginalization.\n" RESET, second_newest_ts);
-      // Potentially add more robust error handling here if needed
-      return;
-  }
-
-  PRINT_DEBUG(YELLOW "[MARG]: Marginalizing second-to-last clone at timestamp %.4f.\n" RESET, second_newest_ts);
-
-  // Marginalize the state variable using the existing marginalize function
-  // The caller (VioManager) should have locked the state mutex.
-  StateHelper::marginalize(state, clone_to_marg);
-
-  // Remove the clone pointer from our map *after* marginalization
-  // The caller (VioManager) should have locked the state mutex.
-  state->_clones_IMU.erase(second_newest_ts);
-
-  // Is there sth else to clean up? like observations?
-
-  // NOTE: The caller (VioManager) is responsible for calling
-  // trackFEATS/trackARUCO->get_feature_database()->cleanup_measurements(second_newest_ts);
-
+  
+  StateHelper::marginalize(state, state->_clones_IMU.at(marginal_time));
+  
 }
 
 void StateHelper::marginalize_slam(std::shared_ptr<State> state) {

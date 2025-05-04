@@ -35,8 +35,6 @@ using namespace intnavlib;
 
 void Propagator::propagate_and_clone(std::shared_ptr<State> state, double timestamp) {
 
-  PRINT_DEBUG(RED "[DEBUG]: propagate_and_clone\n" RESET);
-
   // If the difference between the current update time and state is zero
   // We should crash, as this means we would have two clones at the same time!!!!
   if (state->_timestamp == timestamp) {
@@ -400,8 +398,6 @@ std::vector<ov_core::ImuData> Propagator::select_imu_readings(const std::vector<
 void Propagator::predict_and_compute(std::shared_ptr<State> state, const ov_core::ImuData &data_minus, const ov_core::ImuData &data_plus,
                                      Eigen::MatrixXd &F, Eigen::MatrixXd &Qd) {
 
-  PRINT_DEBUG(RED "[DEBUG]: predict_and_compute\n" RESET);
-
   // Time elapsed over interval
   double dt = data_plus.timestamp - data_minus.timestamp;
   // assert(data_plus.timestamp>data_minus.timestamp);
@@ -446,8 +442,6 @@ void Propagator::predict_and_compute(std::shared_ptr<State> state, const ov_core
   }
 
   // Compute the new state mean value
-
-  PRINT_DEBUG(RED "[DEBUG]: IMU integration\n" RESET);
   
   Eigen::Vector4d new_q;
   Eigen::Vector3d new_v, new_p;
@@ -458,8 +452,6 @@ void Propagator::predict_and_compute(std::shared_ptr<State> state, const ov_core
   } else {
     predict_mean_discrete(state, dt, w_hat_avg, a_hat_avg, new_q, new_v, new_p);
   }
-
-  PRINT_DEBUG(RED "[DEBUG]: Setting discrete linearized model for covariance propagation\n" RESET);
 
   // Allocate state transition and continuous-time noise Jacobian
   F = Eigen::MatrixXd::Zero(state->imu_intrinsic_size() + 15, state->imu_intrinsic_size() + 15);

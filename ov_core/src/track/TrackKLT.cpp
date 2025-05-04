@@ -95,8 +95,6 @@ void TrackKLT::feed_new_camera(const CameraData &message) {
 
 void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
 
-  PRINT_DEBUG(RED "[DEBUG]: Tracking monocular frame \n" RESET);
-
   // Lock this data feed for this camera
   size_t cam_id = message.sensor_ids.at(msg_id);
   std::lock_guard<std::mutex> lck(mtx_feeds.at(cam_id));
@@ -191,8 +189,6 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
     ids_last[cam_id] = good_ids_left;
   }
   rT5 = boost::posix_time::microsec_clock::local_time();
-
-  PRINT_DEBUG(RED "[DEBUG]: Done tracking \n" RESET);
 
   // Timing information
   PRINT_ALL("[TIME-KLT]: %.4f seconds for pyramid\n", (rT2 - rT1).total_microseconds() * 1e-6);
@@ -886,7 +882,7 @@ void TrackKLT::perform_matching(const std::vector<cv::Mat> &img0pyr, const std::
     if(mask) n_valid_kpts_fm++;
   }
 
-  PRINT_DEBUG(RED "[DEBUG]: Tracking: FM RANSAC with normalized threshold %.4f - %d / %d \n" RESET, 2.0 / max_focallength, n_valid_kpts_fm, mask_klt.size());
+  // PRINT_DEBUG(RED "[DEBUG]: Tracking: FM RANSAC with normalized threshold %.4f - %d / %d \n" RESET, 2.0 / max_focallength, n_valid_kpts_fm, mask_klt.size());
 
   // Copy back the updated positions
   for (size_t i = 0; i < pts0.size(); i++) {

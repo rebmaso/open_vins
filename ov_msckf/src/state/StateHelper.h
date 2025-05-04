@@ -228,7 +228,7 @@ public:
    * 
    * @param state Pointer to state
    */
-  static void marginalize_second_to_last_clone(std::shared_ptr<State> state);
+  static void marginalize_clone(std::shared_ptr<State> state, const double & marginal_time);
 
   /**
    * @brief Marginalize bad SLAM features

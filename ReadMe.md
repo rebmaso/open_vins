@@ -36,30 +36,26 @@ source install/setup.bash
 ros2 launch ov_msckf subscribe.launch.py config:=intnavlib_sim rviz_enable:=true verbosity:=DEBUG
 ```
 
+```
+ros2 run ov_msckf run_subscribe_msckf
+```
+
 ## TODO / Notes
 
-- make flags in params for everything. need to be able to run regular openvins and to choose if gnss or not
+- did smarter kf policy but still anchor problem (try other representation) and not sure idea of not doing cleanup works. why still 0 common feats?? Understood better Feats/Slamfeats deletion policy
 
 - why fails on solfatara? **see if standard openvins (non ecef) fails as well**. seems to be a problem of loss of tracking during highly dynamic trajectory segment. so, predict during loss of tracking in that dynamic phase is completely off and all linearizations are wrong after. also, bad features are triangulated in that phase (degenerate motion: rotation only). Ideally, it should not lose tracking and should not triang new bad feats. rising condition number helps when forward cam, but also tolerates badly conditioned (ambiguous) features in triangulation.
 Maybe clues [here](https://github.com/rpng/open_vins/issues/481), but first try regular openvins.
 
 - It looks like clones are added at each frame with propagate_and_clone. Oldest frame is marginalized (dumb policy). ideally, we should prune clones to keep a sparse yet spatially long window of clones. not just like n last frames! OR, only clone if enough parallax and perform motion-only BA (like vins fusion) at camera rate. See StateHelper::marginalize_old_clone(state) as used in viomanager.cpp. just marginalize intermediate states (choose policy) and not old one. See [this](https://github.com/rpng/open_vins/issues/319)
 
-- actually when landmarks become SLAM landmarks (after exiting window), they will be adjusted as long as visible. BUT, problem persists if badly initialized with low parallax given short window
-
-- in the end, it should always work great if nadir cam + no rotation only or other motions causing tracking loss. or even motion blur could break everything.
-
-- how bout different feat representations
-
 - why cant viz wrt base_gt
 
-- GNSS Update. Check out updaterzerovelocity.cpp:321 and copy from that! then buffer gnss measurements and handle gnss buffer directly in do_feature_propagate_update
-
-- Check how to better tune triangulation (feature init) settings. can we ensure slam clones are sparse in space? is this already ensured? can we viz them? when flying high its not useful to have a very small window -> no baseline and bad triang. I wouldnt want it e.g. to be the n last frames with feature tracks.
+- GNSS Update // pose update. do propagation forward of meas+ unc with imu measurements. or see if theres a func to d that
 
 - Calibrate my synthetic IMU with kalibr and ros bag. Check imu intrinsics are correct.
 
-- rewrite prop equations taking into account that global frame (ecef now) is not inertial!
+- rewrite prop equations taking into account that global frame (ecef now) is not inertial! add earth rotation terms
 
 ## ===========================================
 

@@ -268,11 +268,11 @@ void ROS2Visualizer::visualize() {
   // publish state
   publish_state();
 
-  // publish points
-  publish_features();
+  // // publish points
+  // publish_features();
 
-  // Publish gt if we have it
-  publish_groundtruth();
+  // // Publish gt if we have it
+  // publish_groundtruth();
 
   // Publish keyframe information
   publish_loopclosure_information();
@@ -458,8 +458,6 @@ void ROS2Visualizer::visualize_final() {
 }
 
 void ROS2Visualizer::callback_inertial(const sensor_msgs::msg::Imu::SharedPtr msg) {
-
-  PRINT_DEBUG(RED "[DEBUG]: Main synchronous processing loop here \n" RESET);
 
   // convert into correct format
   ov_core::ImuData message;

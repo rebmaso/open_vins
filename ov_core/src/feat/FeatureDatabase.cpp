@@ -233,7 +233,7 @@ void FeatureDatabase::cleanup_measurements(double timestamp) {
     for (const auto &pair : (*it).second->timestamps) {
       ct_meas += (int)(pair.second.size());
     }
-    // If delete flag is set, then delete it
+    // If after cleanup there are no more observations, then delete it
     if (ct_meas < 1) {
       features_idlookup.erase(it++);
     } else {
@@ -253,7 +253,7 @@ void FeatureDatabase::cleanup_measurements_exact(double timestamp) {
     for (const auto &pair : (*it).second->timestamps) {
       ct_meas += (int)(pair.second.size());
     }
-    // If delete flag is set, then delete it
+    // If after cleanup there are no more observations, then delete it
     if (ct_meas < 1) {
       features_idlookup.erase(it++);
     } else {

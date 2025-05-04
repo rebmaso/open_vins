@@ -478,17 +478,16 @@ void UpdaterSLAM::update(std::shared_ptr<State> state, std::vector<std::shared_p
   PRINT_ALL("[SLAM-UP]: %.4f seconds total\n", (rT3 - rT1).total_microseconds() * 1e-6);
 }
 
-void UpdaterSLAM::change_anchors(std::shared_ptr<State> state) {
+void UpdaterSLAM::change_anchors(std::shared_ptr<State> state, const double & marg_timestep) {
 
   // Return if we do not have enough clones
   if ((int)state->_clones_IMU.size() <= state->_options.max_clone_size) {
     return;
   }
 
-  // Get the marginalization timestep, and change the anchor for any feature seen from it
   // NOTE: for now we have anchor the feature in the same camera as it is before
   // NOTE: this also does not change the representation of the feature at all right now
-  double marg_timestep = state->margtimestep();
+
   for (auto &f : state->_features_SLAM) {
     // Skip any features that are in the global frame
     if (f.second->_feat_representation == LandmarkRepresentation::Representation::GLOBAL_3D ||

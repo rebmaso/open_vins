@@ -84,7 +84,7 @@ public:
    *
    * @param state State of the filter
    */
-  void change_anchors(std::shared_ptr<State> state);
+  void change_anchors(std::shared_ptr<State> state, const double & marg_timestep);
 
 protected:
   /**

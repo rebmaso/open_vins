@@ -8,6 +8,7 @@ import os
 import sys
 
 launch_args = [
+
     DeclareLaunchArgument(name="namespace", default_value="ov_msckf", description="namespace"),
     DeclareLaunchArgument(
         name="ov_enable", default_value="true", description="enable OpenVINS node"
@@ -74,20 +75,21 @@ def launch_setup(context):
                         config_path)
                     )
             ]
-    node1 = Node(
-        package="ov_msckf",
-        executable="run_subscribe_msckf",
-        condition=IfCondition(LaunchConfiguration("ov_enable")),
-        namespace=LaunchConfiguration("namespace"),
-        output='screen',
-        parameters=[
-            {"verbosity": LaunchConfiguration("verbosity")},
-            {"use_stereo": LaunchConfiguration("use_stereo")},
-            {"max_cameras": LaunchConfiguration("max_cameras")},
-            {"save_total_state": LaunchConfiguration("save_total_state")},
-            {"config_path": config_path},
-        ],
-    )
+    
+    node1 = Node(package="ov_msckf",
+                executable="run_subscribe_msckf",
+                condition=IfCondition(LaunchConfiguration("ov_enable")),
+                namespace=LaunchConfiguration("namespace"),
+                output='screen',
+                # prefix=["gdbserver localhost:3000"],
+                parameters=[
+                    {"verbosity": LaunchConfiguration("verbosity")},
+                    {"use_stereo": LaunchConfiguration("use_stereo")},
+                    {"max_cameras": LaunchConfiguration("max_cameras")},
+                    {"save_total_state": LaunchConfiguration("save_total_state")},
+                    {"config_path": config_path},
+                ]
+                )
 
     node2 = Node(
         package="rviz2",

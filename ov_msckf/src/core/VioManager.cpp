@@ -152,13 +152,6 @@ VioManager::VioManager(VioManagerOptions &params_) : thread_init_running(false),
   updaterSLAM = std::make_shared<UpdaterSLAM>(params.slam_options, params.aruco_options, params.featinit_options);
   updaterGNSS = std::make_shared<UpdaterGNSS>();
 
-  // If we are using zero velocity updates, then create the updater
-  if (params.try_zupt) {
-    updaterZUPT = std::make_shared<UpdaterZeroVelocity>(params.zupt_options, params.imu_noises, trackFEATS->get_feature_database(),
-                                                        propagator, params.gravity_mag, params.zupt_max_velocity,
-                                                        params.zupt_noise_multiplier, params.zupt_max_disparity);
-  }
-
   //===================================================================================
   // Initialize state from prior
   //===================================================================================
@@ -306,7 +299,6 @@ void VioManager::track_image_and_update(const ov_core::CameraData &message_const
   }
 
   // Perform our feature tracking!
-  PRINT_DEBUG(RED "[DEBUG]: Doing Tracking \n" RESET);
   trackFEATS->feed_new_camera(message);
 
   rT2 = boost::posix_time::microsec_clock::local_time();
@@ -343,7 +335,6 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // Also augment it with a new clone!
   // NOTE: if the state is already at the given time (can happen in sim)
   // NOTE: then no need to prop since we already are at the desired timestep
-  PRINT_DEBUG(RED "[DEBUG]: Doing propagation \n" RESET);
   if (state->_timestamp != message.timestamp) {
     propagator->propagate_and_clone(state, message.timestamp);
   }
@@ -366,9 +357,90 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   }
   has_moved_since_zupt = true;
 
+  // ================ Keyframing Logic (inspired by VINS Mono) =================
+
+  // Here, before marginalizing out oldest clone, which is triggered if window has exceeded max count,
+  // Check if second to last clone is a keyframe. If it is, marginalize that one.
+  // This means that our window is comprised of keyframes only (but also last frame)
+  // This keeps the window sparse and long. Inspired by VINS-Mono marginalization strategy
+  // See Estimator::processImage -> FeatureManager::addFeatureCheckParallax -> double FeatureManager::compensatedParallax2
+
+  // Secondary Note: we should only use up to last keyframe (so, second to last clone) when initializing new landmarks.
+  // Dont want to triangulate with latest frame (could be a non keyframe). However, condition number check at triang should take care of that
+
+  // Begin keyframing logic
+  // Note: there is already a previous check that checks min 5 clones 
+
+  if (params.keyframing_on && (int)state->_clones_IMU.size() > 5) {
+
+    // Get timestamps for the last three clones
+    auto it_newest = state->_clones_IMU.rbegin(); // Newest
+    auto it_second_last = std::next(it_newest);   // Second newest (the one we evaluate)
+    auto it_third_last = std::next(it_second_last); // Third newest (reference for parallax)
+
+    double ts_second_last = it_second_last->first;
+    double ts_third_last = it_third_last->first;
+    PRINT_DEBUG(YELLOW "[KF]: Checking keyframe status for second-last clone at ts=%.4f (ref third-last ts=%.4f)\n" RESET,
+                ts_second_last, ts_third_last);
+
+    // Use FeatureHelper to compute disparity (parallax approximation) and common features
+    // between the third-to-last and second-to-last clones.
+    // Note: compute_disparity uses RAW pixel coordinates.
+
+    double disp_mean = 0.0; // Will hold the mean disparity
+    double disp_var = 0.0;     // Variance, not used directly for keyframing decision
+    int num_common_features = 0; // Will hold the count of common features
+
+    ov_core::FeatureHelper::compute_disparity(trackFEATS->get_feature_database(),
+                                              ts_third_last, ts_second_last,
+                                              disp_mean, disp_var, num_common_features);
+
+    // TODO should consider proper ray parallax as done in MATLAB re-implementation:
+    // BTW, VINS-Mono also cheats and uses this dumb parallax=disparity implementation
+
+    // function isLarge = isLargeParalalx(points1, points2, pose1, pose2, intrinsics, minParallax)
+
+    //   % Parallax check
+    //   ray1 = [points1, ones(size(points1(:,1)))]/intrinsics.K' *pose1.R';
+    //   ray2 = [points2, ones(size(points1(:,2)))]/intrinsics.K' *pose2.R';
+
+    //   cosParallax = sum(ray1 .* ray2, 2) ./(vecnorm(ray1, 2, 2) .* vecnorm(ray2, 2, 2));
+    //   isLarge     = cosParallax < cosd(minParallax) & cosParallax > 0;
+    //   end
+    // }
+
+    PRINT_DEBUG(YELLOW "[KF]: num_common_features = %d, disp_mean = %.4f\n" RESET, num_common_features, disp_mean);
+    PRINT_DEBUG(YELLOW "[KF]: kf_min_tracked_features = %d, kf_min_avg_disp = %.4f\n" RESET, params.kf_min_tracked_features, params.kf_min_avg_disp);
+
+    // Apply VINS-Mono Keyframe Criteria
+    // It's a keyframe if parallax is large OR tracked features are few.
+    // Therefore, it's NOT a keyframe if parallax is small AND tracked features are many.
+    bool second_last_is_keyframe = (num_common_features < params.kf_min_tracked_features) || (disp_mean > params.kf_min_avg_disp);
+
+    if (!second_last_is_keyframe) { // Marginalize if it's NOT a keyframe
+        PRINT_DEBUG(YELLOW "[KF]: Marginalizing second last clone (not a keyframe)\n" RESET);
+        StateHelper::marginalize_clone(state, ts_second_last);
+        // Once marginalized, delete clone
+        state->_clones_IMU.erase(ts_second_last);
+        // Do anchor change for all slam features that have second last as anchor
+        updaterSLAM->change_anchors(state, ts_second_last);
+        // cleanup observations of features at marginalized clone
+        trackFEATS->get_feature_database()->cleanup_measurements_exact(ts_second_last);
+    }
+  } // End keyframing logic
+
+  // Note: We might still need to marginalize the oldest if the window is *still* too large after this.
+  // The subsequent call to marginalize_old_clone handles this.
+
+  // ===========================================================
+
   //===================================================================================
-  // MSCKF features and KLT tracks that are SLAM features
+  // Add new SLAM features --> turn MSCKF features and KLT tracks into SLAM features
   //===================================================================================
+
+  // SLAM feats are lost features and marginalized old features (all tracks that have oldest timestamp)
+  // After a couple checks, these are added to SLAM features if there is room
+  // Note: these are removed from trackfeats so theyre not duplicated in slam feats!
 
   // Now, lets get all features that should be used for an update that are lost in the newest frame
   // We explicitly request features that have not been deleted (used) in another update step
@@ -435,9 +507,9 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // Append a new SLAM feature if we have the room to do so
   // Also check that we have waited our delay amount (normally prevents bad first set of slam points)
   if (state->_options.max_slam_features > 0 && message.timestamp - startup_time >= params.dt_slam_delay &&
-      (int)state->_features_SLAM.size() < state->_options.max_slam_features + curr_aruco_tags) {
+      (int)state->_features_SLAM.size() < state->_options.max_slam_features) {
     // Get the total amount to add, then the max amount that we can add given our marginalize feature array
-    int amount_to_add = (state->_options.max_slam_features + curr_aruco_tags) - (int)state->_features_SLAM.size();
+    int amount_to_add = (state->_options.max_slam_features) - (int)state->_features_SLAM.size();
     int valid_amount = (amount_to_add > (int)feats_maxtracks.size()) ? (int)feats_maxtracks.size() : amount_to_add;
     // If we have at least 1 that we can add, lets add it!
     // Note: we remove them from the feat_marg array since we don't want to reuse information...
@@ -489,9 +561,6 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   std::vector<std::shared_ptr<Feature>> featsup_MSCKF = feats_lost;
   featsup_MSCKF.insert(featsup_MSCKF.end(), feats_marg.begin(), feats_marg.end());
   featsup_MSCKF.insert(featsup_MSCKF.end(), feats_maxtracks.begin(), feats_maxtracks.end());
-
-  // Debug: count active features
-  PRINT_DEBUG(RED "[DEBUG]: Doing Update with %d features \n" RESET, featsup_MSCKF.size());
 
   //===================================================================================
   // Now that we have a list of features, lets do the EKF update for MSCKF and SLAM!
@@ -570,96 +639,19 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // Remove features that where used for the update from our extractors at the last timestep
   // This allows for measurements to be used in the future if they failed to be used this time
   // Note we need to do this before we feed a new image, as we want all new measurements to NOT be deleted
-  trackFEATS->get_feature_database()->cleanup();
+  
+  // Note: this should be redundant: feats marked as to delete are not used still by the slam updater (not put in marg and lost)
+  // And when they have no more observations, they are still erased by slam updater
+  // By not doing cleanup, we should keep all tracked feats as long as alive to compute disparity for keyframing
+  // trackFEATS->get_feature_database()->cleanup();
 
   // First do anchor change if we are about to lose an anchor pose
-  updaterSLAM->change_anchors(state);
+  updaterSLAM->change_anchors(state, state->margtimestep());
 
-  // Cleanup any features older than the marginalization time
+  // Cleanup any features older than the marginalization time, if exceeded max clones
   if ((int)state->_clones_IMU.size() > state->_options.max_clone_size) {
     trackFEATS->get_feature_database()->cleanup_measurements(state->margtimestep());
-
   }
-
-  // ================ Keyframing Logic (inspired by VINS Mono) =================
-
-  // Here, before marginalizing out oldest clone, which is triggered if window has exceeded max count,
-  // Check if second to last clone is a keyframe. If it is, marginalize that one.
-  // This means that our window is comprised of keyframes only
-  // This keeps the window sparse and long. Inspired by VINS-Mono marginalization strategy
-  // See Estimator::processImage -> FeatureManager::addFeatureCheckParallax -> double FeatureManager::compensatedParallax2
-  // if (f_manager.addFeatureCheckParallax(frame_count, image, td))
-  // marginalization_flag = MARGIN_OLD;
-  // else
-  //     marginalization_flag = MARGIN_SECOND_NEW;
-  // Eventually, window will then exceed max count and oldest state marginalization still necessary
-
-  // Count total n of frames. If < 3 skip
-  // Count tracked features
-  // Sum up parallax for every feature tracked between third and second last clones
-  // If tracked feats < N or parallax sum > M --> add KF (marginalize clone)
-
-  // Secondary Note: we should only use up to last keyframe (so, second to last clone) when initializing new landmarks.
-  // Dont want to triangulate with latest frame (could be a non keyframe). However, condition number check at triang should take care of that
-
-  bool marginalize_second_last = false;
-
-  if (params.keyframing_on && state->_clones_IMU.size() >= 3) {
-
-    // Get timestamps for the last three clones
-    auto it_newest = state->_clones_IMU.rbegin(); // Newest
-    auto it_second_last = std::next(it_newest);   // Second newest (the one we evaluate)
-    auto it_third_last = std::next(it_second_last); // Third newest (reference for parallax)
-
-    double ts_second_last = it_second_last->first;
-    double ts_third_last = it_third_last->first;
-    PRINT_DEBUG(YELLOW "[KF DEBUG]: Checking keyframe status for second-last clone at ts=%.4f (ref third-last ts=%.4f)\n" RESET,
-                ts_second_last, ts_third_last);
-
-    // Use FeatureHelper to compute disparity (parallax approximation) and common features
-    // between the third-to-last and second-to-last clones.
-    // Note: compute_disparity uses RAW pixel coordinates.
-
-    double disp_mean = 0.0; // Will hold the mean disparity
-    double disp_var = 0.0;     // Variance, not used directly for keyframing decision
-    int num_common_features = 0; // Will hold the count of common features
-
-    ov_core::FeatureHelper::compute_disparity(trackFEATS->get_feature_database(),
-                                              ts_third_last, ts_second_last,
-                                              disp_mean, disp_var, num_common_features);
-
-    // TODO should consider proper ray parallax as done in MATLAB re-implementation:
-    // BTW, VINS-Mono also cheats and uses this dumb parallax=disparity implementation
-
-    // function isLarge = isLargeParalalx(points1, points2, pose1, pose2, intrinsics, minParallax)
-
-    //   % Parallax check
-    //   ray1 = [points1, ones(size(points1(:,1)))]/intrinsics.K' *pose1.R';
-    //   ray2 = [points2, ones(size(points1(:,2)))]/intrinsics.K' *pose2.R';
-
-    //   cosParallax = sum(ray1 .* ray2, 2) ./(vecnorm(ray1, 2, 2) .* vecnorm(ray2, 2, 2));
-    //   isLarge     = cosParallax < cosd(minParallax) & cosParallax > 0;
-    //   end
-    // }
-
-    PRINT_DEBUG(RED "Keyframing: num_common_features = %d, disp_mean = %.4f\n" RESET, num_common_features, disp_mean);
-    PRINT_DEBUG(RED "Keyframing: kf_min_tracked_features = %d, kf_min_avg_disp = %.4f\n" RESET, params.kf_min_tracked_features, params.kf_min_avg_disp);
-
-    // Apply VINS-Mono Keyframe Criteria
-    // It's a keyframe if parallax is large OR tracked features are few.
-    // Therefore, it's NOT a keyframe if parallax is small AND tracked features are many.
-    bool second_last_is_keyframe = (num_common_features < params.kf_min_tracked_features) || (disp_mean > params.kf_min_avg_disp);
-
-    if (!second_last_is_keyframe) { // Marginalize if it's NOT a keyframe
-        PRINT_DEBUG(RED "Keyframing: Marginalizing second last clone (not a keyframe)\n") RESET;
-        // StateHelper::marginalize_second_to_last_clone(state);
-    }
-  }
-
-  // Note: We might still need to marginalize the oldest if the window is *still* too large after this.
-  // The subsequent call to marginalize_old_clone handles this.
-
-  // ===========================================================
 
   // Finally marginalize the oldest clone if needed
   StateHelper::marginalize_old_clone(state);

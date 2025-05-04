@@ -57,8 +57,6 @@ UpdaterMSCKF::UpdaterMSCKF(UpdaterOptions &options, ov_core::FeatureInitializerO
 
 void UpdaterMSCKF::update(std::shared_ptr<State> state, std::vector<std::shared_ptr<Feature>> &feature_vec) {
 
-  PRINT_DEBUG(RED "[DEBUG]: MSCKF updater received %d features, will remove some \n" RESET, feature_vec.size());
-
   // Return if no features
   if (feature_vec.empty())
     return;
@@ -95,7 +93,7 @@ void UpdaterMSCKF::update(std::shared_ptr<State> state, std::vector<std::shared_
     }
   }
 
-  PRINT_DEBUG(RED "[DEBUG]: N. of feats after first cleanup: %d \n" RESET, feature_vec.size());
+  // PRINT_DEBUG(RED "[DEBUG]: N. of feats after first cleanup: %d \n" RESET, feature_vec.size());
 
   rT1 = boost::posix_time::microsec_clock::local_time();
 
@@ -146,7 +144,7 @@ void UpdaterMSCKF::update(std::shared_ptr<State> state, std::vector<std::shared_
     it1++;
   }
 
-  PRINT_DEBUG(RED "[DEBUG]: N. of feats after second cleanup: %d \n" RESET, feature_vec.size());
+  // PRINT_DEBUG(RED "[DEBUG]: N. of feats after second cleanup: %d \n" RESET, feature_vec.size());
 
   rT2 = boost::posix_time::microsec_clock::local_time();
 
@@ -263,7 +261,7 @@ void UpdaterMSCKF::update(std::shared_ptr<State> state, std::vector<std::shared_
     it2++;
   }
 
-  PRINT_DEBUG(RED "[DEBUG]: N. of feats after X2 test: %d \n" RESET, feature_vec.size());
+  // PRINT_DEBUG(RED "[DEBUG]: N. of feats after X2 test: %d \n" RESET, feature_vec.size());
 
   rT3 = boost::posix_time::microsec_clock::local_time();
 
@@ -292,7 +290,7 @@ void UpdaterMSCKF::update(std::shared_ptr<State> state, std::vector<std::shared_
   // Our noise is isotropic, so make it here after our compression
   Eigen::MatrixXd R_big = _options.sigma_pix_sq * Eigen::MatrixXd::Identity(res_big.rows(), res_big.rows());
 
-  PRINT_DEBUG(RED "[DEBUG]: Finally performing update with %d features \n" RESET, res_big.rows());
+  // PRINT_DEBUG(RED "[DEBUG]: Finally performing update with %d features \n" RESET, res_big.rows());
 
   // 6. With all good features update the state
   StateHelper::EKFUpdate(state, Hx_order_big, Hx_big, res_big, R_big);
