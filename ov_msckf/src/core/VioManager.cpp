@@ -418,14 +418,16 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
     bool second_last_is_keyframe = (num_common_features < params.kf_min_tracked_features) || (disp_mean > params.kf_min_avg_disp);
 
     if (!second_last_is_keyframe) { // Marginalize if it's NOT a keyframe
-        PRINT_DEBUG(YELLOW "[KF]: Marginalizing second last clone (not a keyframe)\n" RESET);
-        StateHelper::marginalize_clone(state, ts_second_last);
-        // Once marginalized, delete clone
-        state->_clones_IMU.erase(ts_second_last);
-        // Do anchor change for all slam features that have second last as anchor
-        updaterSLAM->change_anchors(state, ts_second_last);
-        // cleanup observations of features at marginalized clone
-        trackFEATS->get_feature_database()->cleanup_measurements_exact(ts_second_last);
+      PRINT_DEBUG(YELLOW "[KF]: Marginalizing second last clone (not a keyframe)\n" RESET);
+      // Do anchor change for all slam features that have second last as anchor
+      updaterSLAM->change_anchors(state, ts_second_last);
+      // Marginalize non-kf clone
+      StateHelper::marginalize_clone(state, ts_second_last);
+      // Once marginalized, delete clone
+      state->_clones_IMU.erase(ts_second_last);
+      // cleanup observations of features at marginalized clone
+      trackFEATS->get_feature_database()->cleanup_measurements_exact(ts_second_last);
+      // are the feats marginalized if no more measurements?s
     }
   } // End keyframing logic
 
@@ -435,12 +437,27 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // ===========================================================
 
   //===================================================================================
-  // Add new SLAM features --> turn MSCKF features and KLT tracks into SLAM features
+  // Grab feats to use for MSCKF and SLAM updates
   //===================================================================================
 
-  // SLAM feats are lost features and marginalized old features (all tracks that have oldest timestamp)
-  // After a couple checks, these are added to SLAM features if there is room
-  // Note: these are removed from trackfeats so theyre not duplicated in slam feats!
+  // marg feats: trackfeats that are in oldest clone, if max clones
+  // lost feats: trackfeats that are not tracked in latest clone
+
+  // note that we mark those as to_delete in trackfeats so not re-used (avoid duplication of landmarks)
+
+  // prune them after some checks
+
+  // SLAM feats: marg feats (as many as we can)
+  // MSCKF feats: lost feats + unused marg feats (if too many to use in slam)
+
+  // Once SLAM feats, If some SLAM feats are lost (not tracked in latest frame) we marginalize them out.
+  // Same if they fail update a couple times in a row.
+
+  // Some feats might fail tests in SLAM/MSCKF update and unused still
+
+  // We delete only measurements of feats, at marginalized oldest clone
+  // If no more observations of feats
+  // We also marginalize out oldest clone
 
   // Now, lets get all features that should be used for an update that are lost in the newest frame
   // We explicitly request features that have not been deleted (used) in another update step
@@ -451,6 +468,10 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   if ((int)state->_clones_IMU.size() > state->_options.max_clone_size || (int)state->_clones_IMU.size() > 5) {
     feats_marg = trackFEATS->get_feature_database()->features_containing(state->margtimestep(), false, true);
   }
+
+  // Debug print: count number of feats lost and feats marg
+  PRINT_DEBUG(BLUE "[UPDATE]: N. of lost feats: %d \n" RESET, (int)feats_lost.size());
+  PRINT_DEBUG(BLUE "[UPDATE]: N. of marg feats: %d \n" RESET, (int)feats_marg.size());
 
   // Remove any lost features that were from other image streams
   // E.g: if we are cam1 and cam0 has not processed yet, we don't want to try to use those in the update yet
@@ -540,7 +561,6 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
 
   // Lets marginalize out all old SLAM features here
   // These are ones that where not successfully tracked into the current frame
-  // We do *NOT* marginalize out our aruco tags landmarks
   StateHelper::marginalize_slam(state);
 
   // Separate our SLAM features into new ones, and old ones
@@ -557,20 +577,20 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
     }
   }
 
-  // Concatenate our MSCKF feature arrays (i.e., ones not being used for slam updates)
+  // MSCKF feats are lost ones + marg ones that are not used for slam update
   std::vector<std::shared_ptr<Feature>> featsup_MSCKF = feats_lost;
   featsup_MSCKF.insert(featsup_MSCKF.end(), feats_marg.begin(), feats_marg.end());
   featsup_MSCKF.insert(featsup_MSCKF.end(), feats_maxtracks.begin(), feats_maxtracks.end());
-
-  //===================================================================================
-  // Now that we have a list of features, lets do the EKF update for MSCKF and SLAM!
-  //===================================================================================
 
   // Debug: print n. of candidate SLAM & MSCKF feats:  
   PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate MSCKF feats: %d \n" RESET, (int)featsup_MSCKF.size());
   PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate SLAM feats: %d \n" RESET, (int)feats_slam.size());
   PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate SLAM feats (new): %d \n" RESET, (int)feats_slam_DELAYED.size());
   PRINT_DEBUG(BLUE "[UPDATE]: N. of candidate SLAM feats (old): %d \n" RESET, (int)feats_slam_UPDATE.size());
+
+  //===================================================================================
+  // Now that we have a list of features, lets do the EKF update for MSCKF and SLAM!
+  //===================================================================================
 
   // Sort based on track length
   // TODO: we should have better selection logic here (i.e. even feature distribution in the FOV etc..)
@@ -649,7 +669,7 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // Note: this should be redundant: feats marked as to delete are not used still by the slam updater (not put in marg and lost)
   // And when they have no more observations, they are still erased by slam updater
   // By not doing cleanup, we should keep all tracked feats as long as alive to compute disparity for keyframing
-  // trackFEATS->get_feature_database()->cleanup();
+  trackFEATS->get_feature_database()->cleanup();
 
   // First do anchor change if we are about to lose an anchor pose
   updaterSLAM->change_anchors(state, state->margtimestep());

@@ -138,7 +138,15 @@ def launch_setup(context):
         output="screen",
     )
 
-    return [node1, node2, node3, node4, node5, node6]
+    node7 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_enu_to_ecef_munich",
+        arguments=[  "4181359.308673" , "853704.230257" , "4724289.868946" , "0.226137 " , "0.276972" ,  "0.723400"  , "0.590628"    , "ecef", "enu_munich"],
+        output="screen",
+    )
+
+    return [node1, node2, node3, node4, node5, node6, node7]
 
 
 def generate_launch_description():

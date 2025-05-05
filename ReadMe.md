@@ -42,7 +42,9 @@ ros2 run ov_msckf run_subscribe_msckf
 
 ## TODO / Notes
 
-- did smarter kf policy but still anchor problem (try other representation) and not sure idea of not doing cleanup works. why still 0 common feats?? Understood better Feats/Slamfeats deletion policy
+- maybe better alternative to keyframing is just adaptive tracking frequency, as suggested by authors? or, do tracking at high freq but actually push to trackfeats only if enough disparity? so, no marginalization involved
+
+- why feats not used before lost or old? shouldnt matter though since state is re propagated after every slam / msckf update
 
 - why fails on solfatara? **see if standard openvins (non ecef) fails as well**. seems to be a problem of loss of tracking during highly dynamic trajectory segment. so, predict during loss of tracking in that dynamic phase is completely off and all linearizations are wrong after. also, bad features are triangulated in that phase (degenerate motion: rotation only). Ideally, it should not lose tracking and should not triang new bad feats. rising condition number helps when forward cam, but also tolerates badly conditioned (ambiguous) features in triangulation.
 Maybe clues [here](https://github.com/rpng/open_vins/issues/481), but first try regular openvins.

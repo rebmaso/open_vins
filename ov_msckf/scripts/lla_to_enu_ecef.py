@@ -6,8 +6,8 @@ from scipy.spatial.transform import Rotation as R
 # Use as arguments for static transform in ros2, for visualization purposes
 
 # Input LLA (latitude, longitude, altitude)
-lat = 40.867752314626976
-lon = 14.122253633809104
+lat = 48.09873649869652
+lon = 11.539429904262558
 alt = 100
 
 # 1. Convert LLA to ECEF
@@ -30,6 +30,6 @@ r = R.from_matrix(np.transpose(rot_matrix))
 quat = r.as_quat()  # returns [x, y, z, w]
 
 # Output in the format expected by static_transform_publisher
-print("paste this into static transform arguments:")
+print("Paste this into static transform arguments:")
 print(f' "{ecef_x:.6f}" , "{ecef_y:.6f}" , "{ecef_z:.6f}" , "{quat[0]:.6f} " , "{quat[1]:.6f}" ,  "{quat[2]:.6f}"  , "{quat[3]:.6f}" ')
 

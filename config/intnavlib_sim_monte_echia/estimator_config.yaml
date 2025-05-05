@@ -16,9 +16,9 @@ use_gnss: false
 gnss_sync_tolerance_dt: 0.01
 gnss_topic: "/fix/gnss"
 
-keyframing_on: true
-kf_min_tracked_features: 20
-kf_min_avg_disp: 20.0
+keyframing_on: false
+kf_min_avg_disp: 3.0
+kf_min_tracked_features: 15
 
 use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
 integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then analytical covariance propagation is used)
@@ -102,11 +102,10 @@ grid_x: 5 # extraction sub-grid count for horizontal direction (uniform tracking
 grid_y: 5 # extraction sub-grid count for vertical direction (uniform tracking)
 min_px_dist: 10 # distance between features (features near each other provide less information)
 knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
-track_frequency: 30.0 # frequency we will perform feature tracking at (in frames per second / hertz)
+track_frequency: 1.0 # frequency we will perform feature tracking at (in frames per second / hertz)
 downsample_cameras: false # will downsample image in half if true
 num_opencv_threads: 4 # -1: auto, 0-1: serial, >1: number of threads
 histogram_method: "HISTOGRAM" # NONE, HISTOGRAM, CLAHE
-
 
 # Tune to make it work with far away features (otherwise rejects stuff)
 fi_max_dist: 5000000

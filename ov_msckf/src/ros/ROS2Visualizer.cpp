@@ -268,11 +268,11 @@ void ROS2Visualizer::visualize() {
   // publish state
   publish_state();
 
-  // // publish points
-  // publish_features();
+  // publish points
+  publish_features();
 
-  // // Publish gt if we have it
-  // publish_groundtruth();
+  // Publish gt if we have it
+  publish_groundtruth();
 
   // Publish keyframe information
   publish_loopclosure_information();
