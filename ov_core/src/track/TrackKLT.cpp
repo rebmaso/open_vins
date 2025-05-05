@@ -112,7 +112,6 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
     std::vector<cv::KeyPoint> good_left;
     std::vector<size_t> good_ids_left;
     perform_detection_monocular(imgpyr, mask, good_left, good_ids_left);
-    PRINT_DEBUG(RED "[DEBUG]: detecting \n" RESET);
     // Save the current image and pyramid
     std::lock_guard<std::mutex> lckv(mtx_last_vars);
     img_last[cam_id] = img;
@@ -189,6 +188,9 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
     ids_last[cam_id] = good_ids_left;
   }
   rT5 = boost::posix_time::microsec_clock::local_time();
+
+  PRINT_DEBUG(BLUE "[DEBUG]: KLT succesfully tracked: %d points\n" RESET, good_left.size());
+  PRINT_DEBUG(BLUE "[DEBUG]: Feature database size: %d\n" RESET, database->size());
 
   // Timing information
   PRINT_ALL("[TIME-KLT]: %.4f seconds for pyramid\n", (rT2 - rT1).total_microseconds() * 1e-6);
@@ -466,9 +468,10 @@ void TrackKLT::perform_detection_monocular(const std::vector<cv::Mat> &img0pyr, 
 
   // First compute how many more features we need to extract from this image
   // If we don't need any features, just return
-  double min_feat_percent = 0.50;
+  double min_feat_percent = 0.1;
+  int min_feats_needed = 5.0;
   int num_featsneeded = num_features - (int)pts0.size();
-  if (num_featsneeded < std::min(20, (int)(min_feat_percent * num_features)))
+  if (num_featsneeded < std::min(min_feats_needed, (int)(min_feat_percent * num_features)))
     return;
 
   // This is old extraction code that would extract from the whole image

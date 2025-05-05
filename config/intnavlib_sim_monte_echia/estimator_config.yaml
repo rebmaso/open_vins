@@ -17,7 +17,7 @@ gnss_sync_tolerance_dt: 0.01
 gnss_topic: "/fix/gnss"
 
 keyframing_on: false
-kf_min_avg_disp: 3.0
+kf_min_avg_disp: 10.0
 kf_min_tracked_features: 15
 
 use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
@@ -102,7 +102,7 @@ grid_x: 5 # extraction sub-grid count for horizontal direction (uniform tracking
 grid_y: 5 # extraction sub-grid count for vertical direction (uniform tracking)
 min_px_dist: 10 # distance between features (features near each other provide less information)
 knn_ratio: 0.70 # descriptor knn threshold for the top two descriptor matches
-track_frequency: 1.0 # frequency we will perform feature tracking at (in frames per second / hertz)
+track_frequency: 5.0 # frequency we will perform feature tracking at (in frames per second / hertz)
 downsample_cameras: false # will downsample image in half if true
 num_opencv_threads: 4 # -1: auto, 0-1: serial, >1: number of threads
 histogram_method: "HISTOGRAM" # NONE, HISTOGRAM, CLAHE

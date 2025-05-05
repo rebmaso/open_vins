@@ -42,7 +42,9 @@ ros2 run ov_msckf run_subscribe_msckf
 
 ## TODO / Notes
 
-- maybe better alternative to keyframing is just adaptive tracking frequency, as suggested by authors? or, do tracking at high freq but actually push to trackfeats only if enough disparity? so, no marginalization involved
+- maybe better alternative to keyframing is just adaptive tracking frequency, as suggested by authors? or, do tracking at high freq but actually push to trackfeats only if enough disparity? so, no marginalization involved.
+
+- add a return after feed_new_camera in track_image_and_update if disparity check fails. so, only clone on keyframe-y camera messages, while track at max frequency
 
 - why feats not used before lost or old? shouldnt matter though since state is re propagated after every slam / msckf update
 
