@@ -172,7 +172,7 @@ VioManager::VioManager(VioManagerOptions &params_) : thread_init_running(false),
 
   // Create the initial state vector [time(sec), q_GtoI, p_IinG, v_IinG, b_gyro, b_accel]
   Eigen::Matrix<double, 17, 1> init_imustate;
-  init_imustate(0,0) = params.init_start_time; // t0
+  init_imustate(0,0) = -1.0; // invalid t0, get time ref from imu callback
   init_imustate.block<4,1>(1,0) = q_GtoI.coeffs(); // q_GtoI
   init_imustate.block<3,1>(5,0) = est_nav_ecef.r_eb_e; // p_IinG (position of IMU 'I' in Global 'G')
   init_imustate.block<3,1>(8,0) = est_nav_ecef.v_eb_e; // v_IinG (velocity of IMU 'I' in Global 'G')
@@ -186,92 +186,107 @@ VioManager::VioManager(VioManagerOptions &params_) : thread_init_running(false),
 
 void VioManager::feed_measurement_imu(const ov_core::ImuData &message) {
 
+  // If not init yet, save time as t0, then init done
+  if(!is_initialized_vio) {
+    // Set the state time in cam time ref
+    state->_timestamp = message.timestamp - state->_calib_dt_CAMtoIMU->value()(0);
+    startup_time = message.timestamp - state->_calib_dt_CAMtoIMU->value()(0);
+    is_initialized_vio = true;
+  }
+
   // The oldest time we need IMU with is the last clone
   // We shouldn't really need the whole window, but if we go backwards in time we will
   double oldest_time = state->margtimestep();
+
   if (oldest_time > state->_timestamp) {
     oldest_time = -1;
   }
-  if (!is_initialized_vio) {
-    oldest_time = message.timestamp - params.init_options.init_window_time + state->_calib_dt_CAMtoIMU->value()(0) - 0.10;
-  }
+
   propagator->feed_imu(message, oldest_time);
+}
 
-  // Push back to our initializer
-  if (!is_initialized_vio) {
-    initializer->feed_imu(message, oldest_time);
-  }
+void VioManager::feed_measurement_gnss(const ov_core::GNSSData &message) { 
 
-  // Push back to the zero velocity updater if it is enabled
-  // No need to push back if we are just doing the zv-update at the begining and we have moved
-  if (is_initialized_vio && updaterZUPT != nullptr && (!params.zupt_only_at_beginning || !has_moved_since_zupt)) {
-    updaterZUPT->feed_imu(message, oldest_time);
+  // Just return if not using gnss
+  if(!params.use_gnss) return;
+
+  double dt_gnss_cam = 0;
+  double cam_timestamp = message.timestamp + dt_gnss_cam;
+
+  if(state->_timestamp < cam_timestamp) {
+    // Propagate state to gnss timestamp (in cam time reference, assume zero offset here)
+    propagator->propagate_no_clone(state,cam_timestamp);
   }
+  
+  // Perform gnss update
+  updaterGNSS->update(state, message);
+  // invalidate preintegration cache
+  propagator->invalidate_cache();
 }
 
 void VioManager::feed_measurement_simulation(double timestamp, const std::vector<int> &camids,
-                                             const std::vector<std::vector<std::pair<size_t, Eigen::VectorXf>>> &feats) {
+  const std::vector<std::vector<std::pair<size_t, Eigen::VectorXf>>> &feats) {
 
-  // Start timing
-  rT1 = boost::posix_time::microsec_clock::local_time();
+// Start timing
+rT1 = boost::posix_time::microsec_clock::local_time();
 
-  // Check if we actually have a simulated tracker
-  // If not, recreate and re-cast the tracker to our simulation tracker
-  std::shared_ptr<TrackSIM> trackSIM = std::dynamic_pointer_cast<TrackSIM>(trackFEATS);
-  if (trackSIM == nullptr) {
-    // Replace with the simulated tracker
-    trackSIM = std::make_shared<TrackSIM>(state->_cam_intrinsics_cameras, state->_options.max_aruco_features);
-    trackFEATS = trackSIM;
-    // Need to also replace it in init and zv-upt since it points to the trackFEATS db pointer
-    initializer = std::make_shared<ov_init::InertialInitializer>(params.init_options, trackFEATS->get_feature_database());
-    if (params.try_zupt) {
-      updaterZUPT = std::make_shared<UpdaterZeroVelocity>(params.zupt_options, params.imu_noises, trackFEATS->get_feature_database(),
-                                                          propagator, params.gravity_mag, params.zupt_max_velocity,
-                                                          params.zupt_noise_multiplier, params.zupt_max_disparity);
-    }
-    PRINT_WARNING(RED "[SIM]: casting our tracker to a TrackSIM object!\n" RESET);
-  }
+// Check if we actually have a simulated tracker
+// If not, recreate and re-cast the tracker to our simulation tracker
+std::shared_ptr<TrackSIM> trackSIM = std::dynamic_pointer_cast<TrackSIM>(trackFEATS);
+if (trackSIM == nullptr) {
+// Replace with the simulated tracker
+trackSIM = std::make_shared<TrackSIM>(state->_cam_intrinsics_cameras, state->_options.max_aruco_features);
+trackFEATS = trackSIM;
+// Need to also replace it in init and zv-upt since it points to the trackFEATS db pointer
+initializer = std::make_shared<ov_init::InertialInitializer>(params.init_options, trackFEATS->get_feature_database());
+if (params.try_zupt) {
+updaterZUPT = std::make_shared<UpdaterZeroVelocity>(params.zupt_options, params.imu_noises, trackFEATS->get_feature_database(),
+               propagator, params.gravity_mag, params.zupt_max_velocity,
+               params.zupt_noise_multiplier, params.zupt_max_disparity);
+}
+PRINT_WARNING(RED "[SIM]: casting our tracker to a TrackSIM object!\n" RESET);
+}
 
-  // Feed our simulation tracker
-  trackSIM->feed_measurement_simulation(timestamp, camids, feats);
-  rT2 = boost::posix_time::microsec_clock::local_time();
+// Feed our simulation tracker
+trackSIM->feed_measurement_simulation(timestamp, camids, feats);
+rT2 = boost::posix_time::microsec_clock::local_time();
 
-  // Check if we should do zero-velocity, if so update the state with it
-  // Note that in the case that we only use in the beginning initialization phase
-  // If we have since moved, then we should never try to do a zero velocity update!
-  if (is_initialized_vio && updaterZUPT != nullptr && (!params.zupt_only_at_beginning || !has_moved_since_zupt)) {
-    // If the same state time, use the previous timestep decision
-    if (state->_timestamp != timestamp) {
-      did_zupt_update = updaterZUPT->try_update(state, timestamp);
-    }
-    if (did_zupt_update) {
-      assert(state->_timestamp == timestamp);
-      propagator->clean_old_imu_measurements(timestamp + state->_calib_dt_CAMtoIMU->value()(0) - 0.10);
-      updaterZUPT->clean_old_imu_measurements(timestamp + state->_calib_dt_CAMtoIMU->value()(0) - 0.10);
-      propagator->invalidate_cache();
-      return;
-    }
-  }
+// Check if we should do zero-velocity, if so update the state with it
+// Note that in the case that we only use in the beginning initialization phase
+// If we have since moved, then we should never try to do a zero velocity update!
+if (is_initialized_vio && updaterZUPT != nullptr && (!params.zupt_only_at_beginning || !has_moved_since_zupt)) {
+// If the same state time, use the previous timestep decision
+if (state->_timestamp != timestamp) {
+did_zupt_update = updaterZUPT->try_update(state, timestamp);
+}
+if (did_zupt_update) {
+assert(state->_timestamp == timestamp);
+propagator->clean_old_imu_measurements(timestamp + state->_calib_dt_CAMtoIMU->value()(0) - 0.10);
+updaterZUPT->clean_old_imu_measurements(timestamp + state->_calib_dt_CAMtoIMU->value()(0) - 0.10);
+propagator->invalidate_cache();
+return;
+}
+}
 
-  // If we do not have VIO initialization, then return an error
-  if (!is_initialized_vio) {
-    PRINT_ERROR(RED "[SIM]: your vio system should already be initialized before simulating features!!!\n" RESET);
-    PRINT_ERROR(RED "[SIM]: initialize your system first before calling feed_measurement_simulation()!!!!\n" RESET);
-    std::exit(EXIT_FAILURE);
-  }
+// If we do not have VIO initialization, then return an error
+if (!is_initialized_vio) {
+PRINT_ERROR(RED "[SIM]: your vio system should already be initialized before simulating features!!!\n" RESET);
+PRINT_ERROR(RED "[SIM]: initialize your system first before calling feed_measurement_simulation()!!!!\n" RESET);
+std::exit(EXIT_FAILURE);
+}
 
-  // Call on our propagate and update function
-  // Simulation is either all sync, or single camera...
-  ov_core::CameraData message;
-  message.timestamp = timestamp;
-  for (auto const &camid : camids) {
-    int width = state->_cam_intrinsics_cameras.at(camid)->w();
-    int height = state->_cam_intrinsics_cameras.at(camid)->h();
-    message.sensor_ids.push_back(camid);
-    message.images.push_back(cv::Mat::zeros(cv::Size(width, height), CV_8UC1));
-    message.masks.push_back(cv::Mat::zeros(cv::Size(width, height), CV_8UC1));
-  }
-  do_feature_propagate_update(message);
+// Call on our propagate and update function
+// Simulation is either all sync, or single camera...
+ov_core::CameraData message;
+message.timestamp = timestamp;
+for (auto const &camid : camids) {
+int width = state->_cam_intrinsics_cameras.at(camid)->w();
+int height = state->_cam_intrinsics_cameras.at(camid)->h();
+message.sensor_ids.push_back(camid);
+message.images.push_back(cv::Mat::zeros(cv::Size(width, height), CV_8UC1));
+message.masks.push_back(cv::Mat::zeros(cv::Size(width, height), CV_8UC1));
+}
+do_feature_propagate_update(message);
 }
 
 void VioManager::track_image_and_update(const ov_core::CameraData &message_const) {
@@ -356,83 +371,6 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
     return;
   }
   has_moved_since_zupt = true;
-
-  // ================ Keyframing Logic (inspired by VINS Mono) =================
-
-  // Here, before marginalizing out oldest clone, which is triggered if window has exceeded max count,
-  // Check if second to last clone is a keyframe. If it is, marginalize that one.
-  // This means that our window is comprised of keyframes only (but also last frame)
-  // This keeps the window sparse and long. Inspired by VINS-Mono marginalization strategy
-  // See Estimator::processImage -> FeatureManager::addFeatureCheckParallax -> double FeatureManager::compensatedParallax2
-
-  // Secondary Note: we should only use up to last keyframe (so, second to last clone) when initializing new landmarks.
-  // Dont want to triangulate with latest frame (could be a non keyframe). However, condition number check at triang should take care of that
-
-  // Begin keyframing logic
-  // Note: there is already a previous check that checks min 5 clones 
-
-  if (params.keyframing_on && (int)state->_clones_IMU.size() > 5) {
-
-    // Get timestamps for the last three clones
-    auto it_newest = state->_clones_IMU.rbegin(); // Newest
-    auto it_second_last = std::next(it_newest);   // Second newest (the one we evaluate)
-    auto it_third_last = std::next(it_second_last); // Third newest (reference for parallax)
-
-    double ts_second_last = it_second_last->first;
-    double ts_third_last = it_third_last->first;
-    PRINT_DEBUG(YELLOW "[KF]: Checking keyframe status for second-last clone at ts=%.4f (ref third-last ts=%.4f)\n" RESET,
-                ts_second_last, ts_third_last);
-
-    // Use FeatureHelper to compute disparity (parallax approximation) and common features
-    // between the third-to-last and second-to-last clones.
-    // Note: compute_disparity uses RAW pixel coordinates.
-
-    double disp_mean = 0.0; // Will hold the mean disparity
-    double disp_var = 0.0;     // Variance, not used directly for keyframing decision
-    int num_common_features = 0; // Will hold the count of common features
-
-    ov_core::FeatureHelper::compute_disparity(trackFEATS->get_feature_database(),
-                                              ts_third_last, ts_second_last,
-                                              disp_mean, disp_var, num_common_features);
-
-    // TODO should consider proper ray parallax as done in MATLAB re-implementation:
-    // BTW, VINS-Mono also cheats and uses this dumb parallax=disparity implementation
-
-    // function isLarge = isLargeParalalx(points1, points2, pose1, pose2, intrinsics, minParallax)
-
-    //   % Parallax check
-    //   ray1 = [points1, ones(size(points1(:,1)))]/intrinsics.K' *pose1.R';
-    //   ray2 = [points2, ones(size(points1(:,2)))]/intrinsics.K' *pose2.R';
-
-    //   cosParallax = sum(ray1 .* ray2, 2) ./(vecnorm(ray1, 2, 2) .* vecnorm(ray2, 2, 2));
-    //   isLarge     = cosParallax < cosd(minParallax) & cosParallax > 0;
-    //   end
-    // }
-
-    PRINT_DEBUG(YELLOW "[KF]: num_common_features = %d, disp_mean = %.4f\n" RESET, num_common_features, disp_mean);
-    PRINT_DEBUG(YELLOW "[KF]: kf_min_tracked_features = %d, kf_min_avg_disp = %.4f\n" RESET, params.kf_min_tracked_features, params.kf_min_avg_disp);
-
-    // Apply VINS-Mono Keyframe Criteria
-    // It's a keyframe if parallax is large OR tracked features are few.
-    // Therefore, it's NOT a keyframe if parallax is small AND tracked features are many.
-    bool second_last_is_keyframe = (num_common_features < params.kf_min_tracked_features) || (disp_mean > params.kf_min_avg_disp);
-
-    if (!second_last_is_keyframe) { // Marginalize if it's NOT a keyframe
-      PRINT_DEBUG(YELLOW "[KF]: Marginalizing second last clone (not a keyframe)\n" RESET);
-      // Do anchor change for all slam features that have second last as anchor
-      updaterSLAM->change_anchors(state, ts_second_last);
-      // Marginalize non-kf clone
-      StateHelper::marginalize_clone(state, ts_second_last);
-      // Once marginalized, delete clone
-      state->_clones_IMU.erase(ts_second_last);
-      // cleanup observations of features at marginalized clone
-      trackFEATS->get_feature_database()->cleanup_measurements_exact(ts_second_last);
-      // are the feats marginalized if no more measurements?s
-    }
-  } // End keyframing logic
-
-  // Note: We might still need to marginalize the oldest if the window is *still* too large after this.
-  // The subsequent call to marginalize_old_clone handles this.
 
   // ===========================================================
 
@@ -666,9 +604,6 @@ void VioManager::do_feature_propagate_update(const ov_core::CameraData &message)
   // This allows for measurements to be used in the future if they failed to be used this time
   // Note we need to do this before we feed a new image, as we want all new measurements to NOT be deleted
   
-  // Note: this should be redundant: feats marked as to delete are not used still by the slam updater (not put in marg and lost)
-  // And when they have no more observations, they are still erased by slam updater
-  // By not doing cleanup, we should keep all tracked feats as long as alive to compute disparity for keyframing
   trackFEATS->get_feature_database()->cleanup();
 
   // First do anchor change if we are about to lose an anchor pose

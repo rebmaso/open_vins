@@ -33,7 +33,7 @@ Note: use make clean with ccache: it will rebuild fast dont worry
 
 ```
 source install/setup.bash
-ros2 launch ov_msckf subscribe.launch.py config:=intnavlib_sim rviz_enable:=true verbosity:=DEBUG
+ros2 launch ov_msckf subscribe.launch.py config:=<folder_name> rviz_enable:=true verbosity:=DEBUG
 ```
 
 ```
@@ -42,24 +42,17 @@ ros2 run ov_msckf run_subscribe_msckf
 
 ## TODO / Notes
 
-- maybe better alternative to keyframing is just adaptive tracking frequency, as suggested by authors? or, do tracking at high freq but actually push to trackfeats only if enough disparity? so, no marginalization involved.
-
-- add a return after feed_new_camera in track_image_and_update if disparity check fails. so, only clone on keyframe-y camera messages, while track at max frequency
-
-- why feats not used before lost or old? shouldnt matter though since state is re propagated after every slam / msckf update
-
-- why fails on solfatara? **see if standard openvins (non ecef) fails as well**. seems to be a problem of loss of tracking during highly dynamic trajectory segment. so, predict during loss of tracking in that dynamic phase is completely off and all linearizations are wrong after. also, bad features are triangulated in that phase (degenerate motion: rotation only). Ideally, it should not lose tracking and should not triang new bad feats. rising condition number helps when forward cam, but also tolerates badly conditioned (ambiguous) features in triangulation.
-Maybe clues [here](https://github.com/rpng/open_vins/issues/481), but first try regular openvins.
-
-- It looks like clones are added at each frame with propagate_and_clone. Oldest frame is marginalized (dumb policy). ideally, we should prune clones to keep a sparse yet spatially long window of clones. not just like n last frames! OR, only clone if enough parallax and perform motion-only BA (like vins fusion) at camera rate. See StateHelper::marginalize_old_clone(state) as used in viomanager.cpp. just marginalize intermediate states (choose policy) and not old one. See [this](https://github.com/rpng/open_vins/issues/319)
+- maybe better alternative to keyframing is just adaptive tracking frequency, as suggested by authors? or, do tracking at high freq but actually push to trackfeats only if enough disparity? so, no marginalization involved. add a return after feed_new_camera in track_image_and_update if disparity check fails. so, only clone on keyframe-y camera messages, while track at max frequency
 
 - why cant viz wrt base_gt
 
-- GNSS Update // pose update. do propagation forward of meas+ unc with imu measurements. or see if theres a func to d that
-
-- Calibrate my synthetic IMU with kalibr and ros bag. Check imu intrinsics are correct.
+- write better imu intrinsics - done
 
 - rewrite prop equations taking into account that global frame (ecef now) is not inertial! add earth rotation terms
+
+- X2 test gnss update
+
+- theres been a segfault bug accessing bad map key. cant reproduce it now. 
 
 ## ===========================================
 

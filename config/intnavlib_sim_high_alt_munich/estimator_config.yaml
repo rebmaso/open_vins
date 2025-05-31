@@ -2,7 +2,6 @@
 
 verbosity: "DEBUG" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
 
-init_start_time: 0.0
 init_lla: [48.09873649869652, 11.539429904262558,10000]
 init_v_eb_n: [100.0,0.0,0.0]
 init_rpy_n_b: [0.0,0.0,0.0]
@@ -14,11 +13,7 @@ init_b_g_unc: 4.8481368e-05
 
 use_gnss: false
 gnss_sync_tolerance_dt: 0.01
-gnss_topic: "/fix/gnss"
-
-keyframing_on: false
-kf_min_avg_disp: 3.0
-kf_min_tracked_features: 15
+gnss_topic: "/gnss/fix"
 
 use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
 integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then analytical covariance propagation is used)

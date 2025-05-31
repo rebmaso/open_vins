@@ -102,9 +102,6 @@ struct VioManagerOptions {
 
   // ==== Prior Initialization Params =====
 
-  /// Initial timestamp for prior initialization.
-  double init_start_time = 0.0;
-
   /// Initial Latitude, Longitude, Altitude [deg, deg, m].
   std::vector<double> init_lla = {0.0, 0.0, 0.0};
   /// Initial Velocity in NED frame [m/s].
@@ -127,7 +124,6 @@ struct VioManagerOptions {
 
   bool use_gnss = false;
   double gnss_sync_tolerance_dt = 0.05;
-  std::string gnss_topic = "/fix";
 
   /**
    * @brief This function will load print out all estimator settings loaded.
@@ -150,9 +146,7 @@ struct VioManagerOptions {
       parser->parse_config("record_timing_filepath", record_timing_filepath);
       parser->parse_config("use_gnss", use_gnss);
       parser->parse_config("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt);
-      parser->parse_config("gnss_topic", gnss_topic);
 
-      parser->parse_config("init_start_time", init_start_time);
       parser->parse_config("init_lla", init_lla);
       parser->parse_config("init_v_eb_n", init_v_eb_n);
       parser->parse_config("init_rpy_n_b", init_rpy_n_b);
@@ -172,8 +166,6 @@ struct VioManagerOptions {
     PRINT_DEBUG("  - record timing filepath: %s\n", record_timing_filepath.c_str());
     PRINT_DEBUG("  - use gnss?: %d\n", (int)use_gnss);
     PRINT_DEBUG("  - gnss_sync_tolerance_dt: %.4f\n", gnss_sync_tolerance_dt);
-    PRINT_DEBUG("  - gnss_topic: %s\n", gnss_topic.c_str());
-    PRINT_DEBUG("  - init_start_time: %.4f\n", init_start_time);
     PRINT_DEBUG("  - init_lla [deg,deg,m]: %.6f, %.6f, %.2f\n", init_lla[0], init_lla[1], init_lla[2]);
     PRINT_DEBUG("  - init_v_eb_n [m/s]: %.3f, %.3f, %.3f\n", init_v_eb_n[0], init_v_eb_n[1], init_v_eb_n[2]);
     PRINT_DEBUG("  - init_rpy_n_b [deg]: %.3f, %.3f, %.3f\n", init_rpy_n_b[0], init_rpy_n_b[1], init_rpy_n_b[2]);
@@ -496,17 +488,6 @@ struct VioManagerOptions {
   /// Frequency we want to track images at (higher freq ones will be dropped)
   double track_frequency = 20.0;
 
-  // ==== Marginalization params ======
-
-  /// If true, enables VINS-Mono style keyframe selection for marginalization.
-  bool keyframing_on = false;
-
-  /// Minimum number of commonly tracked features between second-last and third-last clones. If below, second-last is a keyframe.
-  int kf_min_tracked_features = 20;
-
-  /// Minimum average disparity (normalized pixels) between second-last and third-last clones. If above, second-last is a keyframe.
-  double kf_min_avg_disp = 20; // Adjust this value based on typical motion/scene
-
   // ==================================
 
   /// Parameters used by our feature initialize / triangulator
@@ -551,10 +532,6 @@ struct VioManagerOptions {
       parser->parse_config("knn_ratio", knn_ratio);
       parser->parse_config("track_frequency", track_frequency);
 
-      // Add parsing for the new parameters
-      parser->parse_config("keyframing_on", keyframing_on);
-      parser->parse_config("kf_min_tracked_features", kf_min_tracked_features);
-      parser->parse_config("kf_min_avg_disp", kf_min_avg_disp);
     }
     PRINT_DEBUG("FEATURE TRACKING PARAMETERS:\n");
     PRINT_DEBUG("  - use_stereo: %d\n", use_stereo);
@@ -572,11 +549,6 @@ struct VioManagerOptions {
     PRINT_DEBUG("  - hist method: %d\n", (int)histogram_method);
     PRINT_DEBUG("  - knn ratio: %.3f\n", knn_ratio);
     PRINT_DEBUG("  - track frequency: %.1f\n", track_frequency);
-
-    // Add printing for the new parameters
-    PRINT_DEBUG("  - keyframing_on: %d\n", keyframing_on);
-    PRINT_DEBUG("  - kf_min_tracked_features: %d\n", kf_min_tracked_features);
-    PRINT_DEBUG("  - kf_min_avg_disp: %.3f\n", kf_min_avg_disp);
 
     featinit_options.print(parser);
   }

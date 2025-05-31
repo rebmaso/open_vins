@@ -110,6 +110,18 @@ public:
   void propagate_and_clone(std::shared_ptr<State> state, double timestamp);
 
   /**
+   * @brief Propagate state up to given timestamp
+   *
+   * This will first collect all imu readings that occured between the
+   * *current* state time and the new time we want the state to be at.
+   * If we don't have any imu readings we will try to extrapolate into the future.
+   *
+   * @param state Pointer to state
+   * @param timestamp Time to propagate to and clone at (CAM clock frame)
+   */
+  void propagate_no_clone(std::shared_ptr<State> state, double timestamp);
+
+  /**
    * @brief Gets what the state and its covariance will be at a given timestamp
    *
    * This can be used to find what the state will be in the "future" without propagating it.

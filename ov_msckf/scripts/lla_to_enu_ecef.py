@@ -1,14 +1,21 @@
 import numpy as np
 from pyproj import Transformer
 from scipy.spatial.transform import Rotation as R
+import argparse
 
 # Utility script to get ECEF pos & rot coordinates of ENU frame centered at LLA
 # Use as arguments for static transform in ros2, for visualization purposes
 
-# Input LLA (latitude, longitude, altitude)
-lat = 48.09873649869652
-lon = 11.539429904262558
-alt = 100
+# Set up command-line argument parsing
+parser = argparse.ArgumentParser(description="Convert LLA to ECEF and ENU rotation for static_transform_publisher.")
+parser.add_argument("latitude", type=float, help="Latitude in decimal degrees")
+parser.add_argument("longitude", type=float, help="Longitude in decimal degrees")
+parser.add_argument("altitude", type=float, help="Altitude in meters")
+args = parser.parse_args()
+
+lat = args.latitude
+lon = args.longitude
+alt = args.altitude
 
 # 1. Convert LLA to ECEF
 transformer = Transformer.from_crs("epsg:4979", "epsg:4978", always_xy=True)  # WGS84 3D to ECEF
@@ -32,4 +39,3 @@ quat = r.as_quat()  # returns [x, y, z, w]
 # Output in the format expected by static_transform_publisher
 print("Paste this into static transform arguments:")
 print(f' "{ecef_x:.6f}" , "{ecef_y:.6f}" , "{ecef_z:.6f}" , "{quat[0]:.6f} " , "{quat[1]:.6f}" ,  "{quat[2]:.6f}"  , "{quat[3]:.6f}" ')
-

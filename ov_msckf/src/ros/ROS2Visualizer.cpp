@@ -170,7 +170,7 @@ void ROS2Visualizer::setup_subscribers(std::shared_ptr<ov_core::YamlParser> pars
   _node->declare_parameter<std::string>("topic_imu", "/imu0");
   _node->get_parameter("topic_imu", topic_imu);
   parser->parse_external("relative_config_imu", "imu0", "rostopic", topic_imu);
-  sub_imu = _node->create_subscription<sensor_msgs::msg::Imu>(topic_imu, rclcpp::SensorDataQoS(),
+  sub_imu = _node->create_subscription<sensor_msgs::msg::Imu>(topic_imu, rclcpp::QoS(1000),
                                                               std::bind(&ROS2Visualizer::callback_inertial, this, std::placeholders::_1));
   PRINT_INFO("subscribing to IMU: %s\n", topic_imu.c_str());
 
@@ -211,7 +211,7 @@ void ROS2Visualizer::setup_subscribers(std::shared_ptr<ov_core::YamlParser> pars
       // auto sub = _node->create_subscription<sensor_msgs::msg::Image>(
       //    cam_topic, rclcpp::SensorDataQoS(), std::bind(&ROS2Visualizer::callback_monocular, this, std::placeholders::_1, i));
       auto sub = _node->create_subscription<sensor_msgs::msg::Image>(
-          cam_topic, 10, [this, i](const sensor_msgs::msg::Image::SharedPtr msg0) { callback_monocular(msg0, i); });
+          cam_topic, 50, [this, i](const sensor_msgs::msg::Image::SharedPtr msg0) { callback_monocular(msg0, i); });
       subs_cam.push_back(sub);
       PRINT_INFO("subscribing to cam (mono): %s\n", cam_topic.c_str());
     }
@@ -227,16 +227,8 @@ void ROS2Visualizer::setup_subscribers(std::shared_ptr<ov_core::YamlParser> pars
 
   // create subscriber
   sub_gnss = _node->create_subscription<sensor_msgs::msg::NavSatFix>(
-      gnss_topic, rclcpp::SensorDataQoS(), std::bind(&ROS2Visualizer::callback_gnss, this, std::placeholders::_1));
+      gnss_topic, rclcpp::QoS(100), std::bind(&ROS2Visualizer::callback_gnss, this, std::placeholders::_1));
   PRINT_INFO("Subscribing to GNSS: %s\n", gnss_topic.c_str()); // Use INFO or DEBUG as appropriate
-
-  // Get gnss_sync_tolerance_dt parameter
-  gnss_sync_tolerance_dt = 0.01;
-  // _node->declare_parameter<double>("gnss_sync_tolerance_dt", 0.01);
-  // _node->get_parameter("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt);
-  parser->parse_config("gnss_sync_tolerance_dt", gnss_sync_tolerance_dt); // Parse from config file ONLY
-
-  PRINT_INFO("GNSS sync tolerance dt: %.4f\n", gnss_sync_tolerance_dt);
 
 }
 
@@ -512,7 +504,7 @@ void ROS2Visualizer::callback_inertial(const sensor_msgs::msg::Imu::SharedPtr ms
     // Iterate all queue from oldest, drop if too old or too new wrt current state time
 
     // find measurement that is recent enough, searching from oldest
-    while (!gnss_queue.empty() && gnss_queue.at(0).timestamp < _app->get_state()->_timestamp - gnss_sync_tolerance_dt) {
+    while (!gnss_queue.empty() && gnss_queue.at(0).timestamp < _app->get_state()->_timestamp) {
       gnss_queue.pop_front();
     }
 

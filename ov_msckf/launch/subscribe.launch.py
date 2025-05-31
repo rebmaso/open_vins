@@ -114,6 +114,7 @@ def launch_setup(context):
         output="screen",
     )
 
+
     node4 = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -146,7 +147,15 @@ def launch_setup(context):
         output="screen",
     )
 
-    return [node1, node2, node3, node4, node5, node6, node7]
+    node8 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="static_tf_enu_to_bakhmut",
+        arguments=[  "3330628.271778" , "2601120.399301" , "4761324.584866" , "0.154985 " , "0.317687" ,  "0.840731"  , "0.410154"     , "ecef", "enu_bakhmut"],
+        output="screen",
+    )
+
+    return [node1, node2, node3, node4, node5, node6, node7, node8]
 
 
 def generate_launch_description():

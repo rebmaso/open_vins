@@ -97,16 +97,8 @@ void VioManager::initialize_with_prior(Eigen::Matrix<double, 17, 1> imustate,
   Cov.block<3,3>(12,12) = std::pow(acc_bias_std, 2) * Eigen::Matrix3d::Identity();// bias_a (accel bias)
   StateHelper::set_initial_covariance(state, Cov, order);
 
-  // Set the state time
-  state->_timestamp = imustate(0, 0);
-  startup_time = imustate(0, 0);
-  is_initialized_vio = true;
-
   // Cleanup any features older then the initialization time
   trackFEATS->get_feature_database()->cleanup_measurements(state->_timestamp);
-  if (trackARUCO != nullptr) {
-    trackARUCO->get_feature_database()->cleanup_measurements(state->_timestamp);
-  }
 
   // Print what we init'ed with
   PRINT_INFO(GREEN "[INIT]: INITIALIZED FROM PRIOR!!!!!\n" RESET);

@@ -140,6 +140,112 @@ void Propagator::propagate_and_clone(std::shared_ptr<State> state, double timest
   StateHelper::augment_clone(state, last_w);
 }
 
+void Propagator::propagate_no_clone(std::shared_ptr<State> state, double timestamp) {
+
+  // If the difference between the current update time and state is zero
+  // We should crash, as this means we would have two clones at the same time!!!!
+  if (state->_timestamp == timestamp) {
+    PRINT_ERROR(RED "Propagator::propagate_and_clone(): Propagation called again at same timestep at last update timestep!!!!\n" RESET);
+    std::exit(EXIT_FAILURE);
+  }
+
+  // We should crash if we are trying to propagate backwards
+  if (state->_timestamp > timestamp) {
+    PRINT_ERROR(RED "Propagator::propagate_and_clone(): Propagation called trying to propagate backwards in time!!!!\n" RESET);
+    PRINT_ERROR(RED "Propagator::propagate_and_clone(): desired propagation = %.4f\n" RESET, (timestamp - state->_timestamp));
+    std::exit(EXIT_FAILURE);
+  }
+
+  //===================================================================================
+  //===================================================================================
+  //===================================================================================
+
+  // Set the last time offset value if we have just started the system up
+  if (!have_last_prop_time_offset) {
+    last_prop_time_offset = state->_calib_dt_CAMtoIMU->value()(0);
+    have_last_prop_time_offset = true;
+  }
+
+  // Get what our IMU-camera offset should be (t_imu = t_cam + calib_dt)
+  double t_off_new = state->_calib_dt_CAMtoIMU->value()(0);
+
+  // First lets construct an IMU vector of measurements we need
+  double time0 = state->_timestamp + last_prop_time_offset;
+  double time1 = timestamp + t_off_new;
+  std::vector<ov_core::ImuData> prop_data;
+  {
+    std::lock_guard<std::mutex> lck(imu_data_mtx);
+    prop_data = Propagator::select_imu_readings(imu_data, time0, time1);
+  }
+
+  // We are going to sum up all the state transition matrices, so we can do a single large multiplication at the end
+  // Phi_summed = Phi_i*Phi_summed
+  // Q_summed = Phi_i*Q_summed*Phi_i^T + Q_i
+  // After summing we can multiple the total phi to get the updated covariance
+  // We will then add the noise to the IMU portion of the state
+  Eigen::MatrixXd Phi_summed = Eigen::MatrixXd::Identity(state->imu_intrinsic_size() + 15, state->imu_intrinsic_size() + 15);
+  Eigen::MatrixXd Qd_summed = Eigen::MatrixXd::Zero(state->imu_intrinsic_size() + 15, state->imu_intrinsic_size() + 15);
+  double dt_summed = 0;
+
+  // Loop through all IMU messages, and use them to move the state forward in time
+  // This uses the zero'th order quat, and then constant acceleration discrete
+  if (prop_data.size() > 1) {
+    for (size_t i = 0; i < prop_data.size() - 1; i++) {
+
+      // Get the next state Jacobian and noise Jacobian for this IMU reading
+      Eigen::MatrixXd F, Qdi;
+      predict_and_compute(state, prop_data.at(i), prop_data.at(i + 1), F, Qdi);
+
+      // Next we should propagate our IMU covariance
+      // Pii' = F*Pii*F.transpose() + G*Q*G.transpose()
+      // Pci' = F*Pci and Pic' = Pic*F.transpose()
+      // NOTE: Here we are summing the state transition F so we can do a single mutiplication later
+      // NOTE: Phi_summed = Phi_i*Phi_summed
+      // NOTE: Q_summed = Phi_i*Q_summed*Phi_i^T + G*Q_i*G^T
+      Phi_summed = F * Phi_summed;
+      Qd_summed = F * Qd_summed * F.transpose() + Qdi;
+      Qd_summed = 0.5 * (Qd_summed + Qd_summed.transpose());
+      dt_summed += prop_data.at(i + 1).timestamp - prop_data.at(i).timestamp;
+    }
+  }
+  assert(std::abs((time1 - time0) - dt_summed) < 1e-4);
+
+  // Last angular velocity (used for cloning when estimating time offset)
+  // Remember to correct them before we store them
+  Eigen::Vector3d last_a = Eigen::Vector3d::Zero();
+  Eigen::Vector3d last_w = Eigen::Vector3d::Zero();
+  if (!prop_data.empty()) {
+    Eigen::Matrix3d Dw = State::Dm(state->_options.imu_model, state->_calib_imu_dw->value());
+    Eigen::Matrix3d Da = State::Dm(state->_options.imu_model, state->_calib_imu_da->value());
+    Eigen::Matrix3d Tg = State::Tg(state->_calib_imu_tg->value());
+    last_a = state->_calib_imu_ACCtoIMU->Rot() * Da * (prop_data.at(prop_data.size() - 1).am - state->_imu->bias_a());
+    last_w = state->_calib_imu_GYROtoIMU->Rot() * Dw * (prop_data.at(prop_data.size() - 1).wm - state->_imu->bias_g() - Tg * last_a);
+  }
+
+  // Do the update to the covariance with our "summed" state transition and IMU noise addition...
+  std::vector<std::shared_ptr<Type>> Phi_order;
+  Phi_order.push_back(state->_imu);
+  if (state->_options.do_calib_imu_intrinsics) {
+    Phi_order.push_back(state->_calib_imu_dw);
+    Phi_order.push_back(state->_calib_imu_da);
+    if (state->_options.do_calib_imu_g_sensitivity) {
+      Phi_order.push_back(state->_calib_imu_tg);
+    }
+    if (state->_options.imu_model == StateOptions::ImuModel::KALIBR) {
+      Phi_order.push_back(state->_calib_imu_GYROtoIMU);
+    } else {
+      Phi_order.push_back(state->_calib_imu_ACCtoIMU);
+    }
+  }
+  StateHelper::EKFPropagation(state, Phi_order, Phi_order, Phi_summed, Qd_summed);
+
+  // Set timestamp data
+  state->_timestamp = timestamp;
+  last_prop_time_offset = t_off_new;
+
+}
+
+
 bool Propagator::fast_state_propagate(std::shared_ptr<State> state, double timestamp, Eigen::Matrix<double, 13, 1> &state_plus,
                                       Eigen::Matrix<double, 12, 12> &covariance) {
 
